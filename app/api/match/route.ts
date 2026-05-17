@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createMockMatch } from "@/lib/matchmaking";
+import { saveMatch } from "@/lib/match-store";
 
 const matchSchema = z.object({
   hostName: z.string().trim().min(2).max(32),
@@ -27,11 +28,15 @@ export async function POST(request: Request) {
   }
 
   const match = createMockMatch(result.data.config);
+  saveMatch({
+    ...match,
+    hostName: result.data.hostName
+  });
   const track = result.data.config.mode === "competitive" ? result.data.config.duelLanguage : result.data.config.devCategory;
 
   const roomUrl = `/room/${match.id}?invite=${match.inviteCode}&host=${encodeURIComponent(
     result.data.hostName
-  )}&mode=${result.data.config.mode}&difficulty=${result.data.config.difficulty}&track=${track}`;
+  )}&mode=${result.data.config.mode}&difficulty=${result.data.config.difficulty}&track=${track}&role=host`;
 
   return NextResponse.json({
     match,

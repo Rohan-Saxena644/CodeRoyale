@@ -31,6 +31,16 @@ export interface MatchRecord {
   createdAt: string;
 }
 
+export interface RoomParticipant {
+  name: string;
+  role: "host" | "guest";
+}
+
+export interface StoredMatch extends MatchRecord {
+  hostName: string;
+  guestName?: string;
+}
+
 export interface PhaseTask {
   id: string;
   title: string;

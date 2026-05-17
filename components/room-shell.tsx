@@ -5,20 +5,24 @@ type RoomShellProps = {
   roomId: string;
   inviteCode: string;
   hostName: string;
+  guestName?: string;
+  viewerRole: "host" | "guest";
   config: MatchConfig;
 };
 
-export function RoomShell({ roomId, inviteCode, hostName, config }: RoomShellProps) {
+export function RoomShell({ roomId, inviteCode, hostName, guestName, viewerRole, config }: RoomShellProps) {
+  const roomHeadline = guestName ? "Both players are in the room" : "Waiting for opponent";
+
   return (
     <section className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
       <article className="card-border rounded-[28px] border border-white/10 bg-panel/92 p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-lime">Room status</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Waiting for opponent</h1>
+            <h1 className="mt-2 text-3xl font-semibold text-white">{roomHeadline}</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">
-              This room is scaffolded for Phase 1. The next step is wiring Socket.IO presence, ready events,
-              countdown transitions, and persistent match state with Prisma.
+              Invite-code joining is now live in the app. The next step is wiring Socket.IO presence, ready events,
+              countdown transitions, and persistent room state so both clients update without refreshes.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-right">
@@ -31,12 +35,24 @@ export function RoomShell({ roomId, inviteCode, hostName, config }: RoomShellPro
           <div className="rounded-3xl border border-white/10 bg-black/15 p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-white/45">Host</p>
             <p className="mt-2 text-lg font-semibold text-white">{hostName}</p>
-            <p className="mt-2 text-sm text-lime">Ready and waiting</p>
+            <p className="mt-2 text-sm text-lime">{viewerRole === "host" ? "You created this room" : "Host joined"}</p>
           </div>
-          <div className="rounded-3xl border border-dashed border-white/15 bg-black/10 p-5">
+          <div
+            className={`rounded-3xl p-5 ${
+              guestName
+                ? "border border-white/10 bg-black/15"
+                : "border border-dashed border-white/15 bg-black/10"
+            }`}
+          >
             <p className="text-xs uppercase tracking-[0.18em] text-white/45">Opponent</p>
-            <p className="mt-2 text-lg font-semibold text-white/72">Open slot</p>
-            <p className="mt-2 text-sm text-white/45">Join flow lands here with the invite link</p>
+            <p className="mt-2 text-lg font-semibold text-white/72">{guestName ?? "Open slot"}</p>
+            <p className="mt-2 text-sm text-white/45">
+              {guestName
+                ? viewerRole === "guest"
+                  ? "You joined with the invite code"
+                  : "A second player has claimed the room"
+                : "Another player can now join from /match using the invite code"}
+            </p>
           </div>
         </div>
 
@@ -44,7 +60,7 @@ export function RoomShell({ roomId, inviteCode, hostName, config }: RoomShellPro
           <p className="text-sm font-semibold text-gold">Planned next for this room</p>
           <ul className="mt-3 space-y-2 text-sm text-white/78">
             <li>Socket event flow: `player:join`, `player:ready`, `match:countdown`, `match:start`</li>
-            <li>Shared duel payload: one generated challenge, language/category, and timer seed</li>
+            <li>Guest joins should appear live for the host without copying a full URL manually</li>
             <li>Realtime transition to editor room once both players are present</li>
           </ul>
         </div>
@@ -69,6 +85,10 @@ export function RoomShell({ roomId, inviteCode, hostName, config }: RoomShellPro
             <div className="flex justify-between gap-4">
               <dt className="text-white/55">Room id</dt>
               <dd className="font-mono text-xs text-white/75">{roomId}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-white/55">Viewer role</dt>
+              <dd className="font-medium capitalize text-white">{viewerRole}</dd>
             </div>
           </dl>
         </div>

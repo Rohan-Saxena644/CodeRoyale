@@ -1,4 +1,5 @@
 import { Header } from "@/components/header";
+import { JoinRoomForm } from "@/components/join-room-form";
 import { MatchForm } from "@/components/match-form";
 
 export default function MatchPage() {
@@ -15,7 +16,10 @@ export default function MatchPage() {
           </p>
         </div>
 
-        <MatchForm />
+        <div className="grid gap-6 lg:grid-cols-2">
+          <MatchForm />
+          <JoinRoomForm />
+        </div>
       </section>
     </main>
   );
