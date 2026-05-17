@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MatchMode {
+  competitive
+  dev
+}
+
+enum MatchStatus {
+  waiting
+  countdown
+  active
+  ended
+}
+
+model User {
+  id           String        @id @default(cuid())
+  handle       String        @unique
+  createdAt    DateTime      @default(now())
+  matchPlayers MatchPlayer[]
+}
+
+model Match {
+  id           String        @id @default(cuid())
+  inviteCode   String        @unique
+  mode         MatchMode
+  status       MatchStatus   @default(waiting)
+  difficulty   String
+  duelLanguage String?
+  devCategory  String?
+  createdAt    DateTime      @default(now())
+  startedAt    DateTime?
+  endedAt      DateTime?
+  problem      Problem?
+  submissions  Submission[]
+  players      MatchPlayer[]
+}
+
+model MatchPlayer {
+  id        String   @id @default(cuid())
+  role      String
+  joinedAt  DateTime @default(now())
+  readyAt   DateTime?
+  matchId   String
+  userId    String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+}
+
+model Problem {
+  id                String       @id @default(cuid())
+  mode              MatchMode
+  title             String
+  prompt            String
+  difficulty        String
+  sourceKind        String
+  generatorVersion  String?
+  rawJson           Json
+  createdAt         DateTime     @default(now())
+  matchId           String?      @unique
+  match             Match?       @relation(fields: [matchId], references: [id], onDelete: SetNull)
+}
+
+model Submission {
+  id          String   @id @default(cuid())
+  matchId     String
+  userId      String
+  language    String
+  verdict     String
+  score       Int      @default(0)
+  sourceCode  String
+  output      Json?
+  createdAt   DateTime @default(now())
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+}
