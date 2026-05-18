@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum MatchMode {
@@ -29,6 +30,8 @@ model User {
 model Match {
   id           String        @id @default(cuid())
   inviteCode   String        @unique
+  hostName     String
+  guestName    String?
   mode         MatchMode
   status       MatchStatus   @default(waiting)
   difficulty   String

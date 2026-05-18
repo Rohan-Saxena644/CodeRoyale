@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createMockMatch } from "@/lib/matchmaking";
-import { saveMatch } from "@/lib/match-store";
+import { createMatchRecord } from "@/lib/match-repository";
 
 const matchSchema = z.object({
   hostName: z.string().trim().min(2).max(32),
@@ -27,13 +26,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const match = createMockMatch(result.data.config);
-  saveMatch({
-    ...match,
-    hostName: result.data.hostName,
-    hostReady: false,
-    guestReady: false
-  });
+  const match = await createMatchRecord(result.data.hostName, result.data.config);
   const track =
     result.data.config.mode === "competitive"
       ? (result.data.config.duelLanguage ?? "javascript")

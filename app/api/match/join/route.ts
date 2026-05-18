@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getMatchByInviteCode, updateMatchGuest } from "@/lib/match-store";
+import { getStoredMatchByInviteCode, updateStoredMatchGuest } from "@/lib/match-repository";
 
 const joinSchema = z.object({
   inviteCode: z.string().trim().min(4).max(12),
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   }
 
   const inviteCode = result.data.inviteCode.toUpperCase();
-  const existingMatch = getMatchByInviteCode(inviteCode);
+  const existingMatch = await getStoredMatchByInviteCode(inviteCode);
 
   if (!existingMatch) {
     return NextResponse.json({ error: "Room not found for that invite code." }, { status: 404 });
@@ -26,11 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "That room already has a guest joined." }, { status: 409 });
   }
 
-  const updatedMatch = updateMatchGuest(inviteCode, result.data.guestName);
-
-  if (!updatedMatch) {
-    return NextResponse.json({ error: "Could not update the room." }, { status: 500 });
-  }
+  const updatedMatch = await updateStoredMatchGuest(inviteCode, result.data.guestName);
 
   const track =
     updatedMatch.config.mode === "competitive"

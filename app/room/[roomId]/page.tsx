@@ -1,6 +1,6 @@
 import { Header } from "@/components/header";
 import { RoomLiveShell } from "@/components/room-live-shell";
-import { getMatchByInviteCode } from "@/lib/match-store";
+import { getStoredMatchByInviteCode } from "@/lib/match-repository";
 import type { DevCategory, DuelLanguage, MatchConfig, ModeKind } from "@/lib/types";
 
 type RoomPageProps = {
@@ -16,7 +16,7 @@ export default async function RoomPage({ params, searchParams }: RoomPageProps) 
   const { roomId } = await params;
   const query = await searchParams;
   const inviteCode = (readSingle(query.invite) ?? roomId.slice(-6)).toUpperCase();
-  const storedMatch = getMatchByInviteCode(inviteCode);
+  const storedMatch = await getStoredMatchByInviteCode(inviteCode);
 
   const mode = storedMatch?.config.mode ?? ((readSingle(query.mode) as ModeKind | undefined) ?? "competitive");
   const difficulty =
