@@ -16,7 +16,7 @@ export function Header() {
       <nav className="hidden items-center gap-5 text-sm text-white/70 md:flex">
         <Link href="#roadmap">Roadmap</Link>
         <Link href="#modes">Modes</Link>
-        <Link href="/match">Create room</Link>
+        <Link href="/match">Create/Join room</Link>
       </nav>
     </header>
   );

@@ -33,11 +33,14 @@ export async function POST(request: Request) {
   }
 
   const track =
-    updatedMatch.config.mode === "competitive" ? updatedMatch.config.duelLanguage : updatedMatch.config.devCategory;
+    updatedMatch.config.mode === "competitive"
+      ? (updatedMatch.config.duelLanguage ?? "javascript")
+      : (updatedMatch.config.devCategory ?? "react-ui");
+  const guestName = updatedMatch.guestName ?? result.data.guestName;
 
   const roomUrl = `/room/${updatedMatch.id}?invite=${updatedMatch.inviteCode}&host=${encodeURIComponent(
     updatedMatch.hostName
-  )}&guest=${encodeURIComponent(updatedMatch.guestName)}&mode=${updatedMatch.config.mode}&difficulty=${
+  )}&guest=${encodeURIComponent(guestName)}&mode=${updatedMatch.config.mode}&difficulty=${
     updatedMatch.config.difficulty
   }&track=${track}&role=guest`;
 

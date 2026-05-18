@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import type { DevCategory, DuelLanguage, MatchConfig, ModeKind } from "@/lib/types";
 
 const duelLanguages: DuelLanguage[] = ["python", "javascript", "cpp", "go", "rust"];
@@ -52,7 +53,7 @@ export function MatchForm() {
       }
 
       const data = (await response.json()) as { roomUrl: string };
-      router.push(data.roomUrl);
+      router.push(data.roomUrl as Route);
     });
   }
 

@@ -49,6 +49,10 @@ export default async function RoomPage({ params, searchParams }: RoomPageProps) 
           guestName={storedMatch?.guestName ?? readSingle(query.guest)}
           viewerRole={((readSingle(query.role) as "host" | "guest" | undefined) ?? "host")}
           config={config}
+          initialStatus={storedMatch?.status ?? "waiting"}
+          initialHostReady={storedMatch?.hostReady ?? false}
+          initialGuestReady={storedMatch?.guestReady ?? false}
+          initialCountdownEndsAt={storedMatch?.countdownEndsAt}
         />
       </section>
     </main>

@@ -30,9 +30,14 @@ export async function POST(request: Request) {
   const match = createMockMatch(result.data.config);
   saveMatch({
     ...match,
-    hostName: result.data.hostName
+    hostName: result.data.hostName,
+    hostReady: false,
+    guestReady: false
   });
-  const track = result.data.config.mode === "competitive" ? result.data.config.duelLanguage : result.data.config.devCategory;
+  const track =
+    result.data.config.mode === "competitive"
+      ? (result.data.config.duelLanguage ?? "javascript")
+      : (result.data.config.devCategory ?? "react-ui");
 
   const roomUrl = `/room/${match.id}?invite=${match.inviteCode}&host=${encodeURIComponent(
     result.data.hostName

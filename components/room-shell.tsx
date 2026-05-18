@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { MatchConfig } from "@/lib/types";
+import type { MatchConfig, MatchStatus } from "@/lib/types";
 
 type RoomShellProps = {
   roomId: string;
@@ -8,7 +8,14 @@ type RoomShellProps = {
   guestName?: string;
   viewerRole: "host" | "guest";
   config: MatchConfig;
+  matchStatus: MatchStatus;
+  hostReady: boolean;
+  guestReady: boolean;
+  countdownLeft?: number | null;
   connectionState?: "connecting" | "connected" | "disconnected";
+  onReadyToggle: () => void;
+  onLeaveRoom: () => void;
+  isReadyPending?: boolean;
 };
 
 export function RoomShell({
@@ -18,9 +25,35 @@ export function RoomShell({
   guestName,
   viewerRole,
   config,
-  connectionState = "disconnected"
+  matchStatus,
+  hostReady,
+  guestReady,
+  countdownLeft,
+  connectionState = "disconnected",
+  onReadyToggle,
+  onLeaveRoom,
+  isReadyPending = false
 }: RoomShellProps) {
-  const roomHeadline = guestName ? "Both players are in the room" : "Waiting for opponent";
+  const roomHeadline =
+    matchStatus === "countdown"
+      ? `Match starts in ${countdownLeft ?? 0}`
+      : matchStatus === "active"
+        ? "Duel is ready to begin"
+        : guestName
+          ? "Both players are in the room"
+          : "Waiting for opponent";
+  const roomSubcopy =
+    matchStatus === "countdown"
+      ? "Both players are locked in. Get ready for the editor room."
+      : matchStatus === "active"
+        ? "Countdown finished. The next step is routing both players into the live duel workspace."
+        : "Invite-code joining is now live in the app. The next step is wiring Socket.IO presence, ready events, countdown transitions, and persistent room state so both clients update without refreshes.";
+  const viewerReady = viewerRole === "host" ? hostReady : guestReady;
+  const canReadyUp = Boolean(hostName && guestName) && matchStatus !== "active";
+  const leaveWarning =
+    matchStatus === "countdown" || matchStatus === "active"
+      ? "Leaving this tab or pressing leave will drop you from the room and end this match flow for now."
+      : "Leaving the room returns you to matchmaking. If you close this tab later, the room presence is lost.";
 
   return (
     <section className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
@@ -29,10 +62,7 @@ export function RoomShell({
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-lime">Room status</p>
             <h1 className="mt-2 text-3xl font-semibold text-white">{roomHeadline}</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">
-              Invite-code joining is now live in the app. The next step is wiring Socket.IO presence, ready events,
-              countdown transitions, and persistent room state so both clients update without refreshes.
-            </p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">{roomSubcopy}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-right">
             <div className="text-xs uppercase tracking-[0.18em] text-white/45">Invite code</div>
@@ -44,7 +74,9 @@ export function RoomShell({
           <div className="rounded-3xl border border-white/10 bg-black/15 p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-white/45">Host</p>
             <p className="mt-2 text-lg font-semibold text-white">{hostName}</p>
-            <p className="mt-2 text-sm text-lime">{viewerRole === "host" ? "You created this room" : "Host joined"}</p>
+            <p className="mt-2 text-sm text-lime">
+              {hostReady ? "Ready" : viewerRole === "host" ? "You created this room" : "Host joined"}
+            </p>
           </div>
           <div
             className={`rounded-3xl p-5 ${
@@ -57,20 +89,65 @@ export function RoomShell({
             <p className="mt-2 text-lg font-semibold text-white/72">{guestName ?? "Open slot"}</p>
             <p className="mt-2 text-sm text-white/45">
               {guestName
-                ? viewerRole === "guest"
-                  ? "You joined with the invite code"
-                  : "A second player has claimed the room"
+                ? guestReady
+                  ? "Ready"
+                  : viewerRole === "guest"
+                    ? "You joined with the invite code"
+                    : "A second player has claimed the room"
                 : "Another player can now join from /match using the invite code"}
             </p>
           </div>
         </div>
 
+        <div className="mt-6 flex flex-col gap-4 rounded-[24px] border border-lime/25 bg-lime/10 p-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-lime">Ready check</p>
+            <p className="mt-1 text-sm text-white/72">
+              {canReadyUp
+                ? viewerReady
+                  ? matchStatus === "countdown"
+                    ? "Countdown is live. You can still unready right now to cancel the start."
+                    : "You are locked in. Unready if you want to change your selection."
+                  : matchStatus === "countdown"
+                    ? "If either player unreadies during countdown, the room goes back to waiting."
+                    : "Both players are here. Mark yourself ready to start the countdown."
+                : "The ready button activates once both players are in the room."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={onReadyToggle}
+              disabled={!canReadyUp || connectionState !== "connected" || isReadyPending}
+              className={`rounded-full px-6 py-3 font-semibold transition ${
+                viewerReady
+                  ? "bg-white text-ink"
+                  : "bg-lime text-ink"
+              } disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              {isReadyPending ? "Updating..." : viewerReady ? "Unready" : "Ready up"}
+            </button>
+            <button
+              type="button"
+              onClick={onLeaveRoom}
+              className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white/82 transition hover:border-coral/55 hover:text-white"
+            >
+              Leave room
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-[20px] border border-coral/35 bg-coral/10 p-4 text-sm text-white/78">
+          <p className="font-semibold text-coral">Room warning</p>
+          <p className="mt-2">{leaveWarning}</p>
+        </div>
+
         <div className="mt-8 rounded-[24px] border border-gold/35 bg-gold/10 p-5">
           <p className="text-sm font-semibold text-gold">Planned next for this room</p>
           <ul className="mt-3 space-y-2 text-sm text-white/78">
-            <li>Socket event flow now updates room presence live through `room:state`</li>
-            <li>Next up: add `player:ready`, `match:countdown`, and `match:start` transitions</li>
-            <li>Realtime transition to editor room once both players are present</li>
+            <li>Socket event flow now handles room presence, ready state, and the synced countdown</li>
+            <li>Next up: route both players into Monaco once the countdown completes</li>
+            <li>After that, the duel room can own the timer, problem panel, and live code sync</li>
           </ul>
         </div>
       </article>

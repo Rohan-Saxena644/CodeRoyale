@@ -3,6 +3,7 @@
 import type { FormEvent } from "react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 
 export function JoinRoomForm() {
   const router = useRouter();
@@ -34,7 +35,7 @@ export function JoinRoomForm() {
         return;
       }
 
-      router.push(data.roomUrl);
+      router.push(data.roomUrl as Route);
     });
   }
 

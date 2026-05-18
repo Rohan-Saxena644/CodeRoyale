@@ -28,7 +28,33 @@ export function updateMatchGuest(inviteCode: string, guestName: string) {
 
   const updatedMatch: StoredMatch = {
     ...match,
-    guestName
+    guestName,
+    guestReady: false,
+    status: "waiting",
+    countdownEndsAt: undefined
+  };
+
+  matches.set(updatedMatch.inviteCode, updatedMatch);
+  return updatedMatch;
+}
+
+export function updateMatchState(
+  inviteCode: string,
+  updates: Partial<Pick<StoredMatch, "hostName" | "guestName" | "hostReady" | "guestReady" | "status" | "countdownEndsAt">>
+) {
+  const match = getMatchByInviteCode(inviteCode);
+
+  if (!match) {
+    return null;
+  }
+
+  const filteredUpdates = Object.fromEntries(
+    Object.entries(updates).filter(([, value]) => value !== undefined)
+  ) as Partial<Pick<StoredMatch, "hostName" | "guestName" | "hostReady" | "guestReady" | "status" | "countdownEndsAt">>;
+
+  const updatedMatch: StoredMatch = {
+    ...match,
+    ...filteredUpdates
   };
 
   matches.set(updatedMatch.inviteCode, updatedMatch);

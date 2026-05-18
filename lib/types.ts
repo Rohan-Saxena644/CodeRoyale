@@ -39,12 +39,20 @@ export interface RoomParticipant {
 export interface StoredMatch extends MatchRecord {
   hostName: string;
   guestName?: string;
+  hostReady: boolean;
+  guestReady: boolean;
+  countdownEndsAt?: number;
 }
 
 export interface RoomPresenceState {
   roomId: string;
+  inviteCode?: string;
+  status: MatchStatus;
   hostName?: string;
   guestName?: string;
+  hostReady: boolean;
+  guestReady: boolean;
+  countdownEndsAt?: number;
 }
 
 export interface PhaseTask {
