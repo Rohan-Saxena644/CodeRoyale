@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import express from "express";
 import { Server } from "socket.io";
 import { nextMatchStatus } from "../lib/match-state";
+import { prisma } from "../lib/prisma";
 import type { RoomPresenceState } from "../lib/types";
 
 const app = express();
@@ -96,6 +97,126 @@ function emitRoomState(roomId: string, nextState: RoomPresenceState) {
   io.to(roomId).emit("room:state", nextState);
 }
 
+async function persistNamesForJoin(inviteCode: string, role: "host" | "guest", handle: string) {
+  if (role === "host") {
+    await prisma.match.update({
+      where: {
+        inviteCode
+      },
+      data: {
+        hostName: handle
+      }
+    });
+    return;
+  }
+
+  await prisma.match.update({
+    where: {
+      inviteCode
+    },
+    data: {
+      guestName: handle,
+      status: "waiting"
+    }
+  });
+}
+
+async function persistRoomAfterDisconnect(inviteCode: string, nextState: RoomPresenceState) {
+  if (!nextState.hostName && !nextState.guestName) {
+    await prisma.match.delete({
+      where: {
+        inviteCode
+      }
+    });
+    return;
+  }
+
+  await prisma.match.update({
+    where: {
+      inviteCode
+    },
+    data: {
+      hostName: nextState.hostName ?? "",
+      guestName: nextState.guestName ?? null,
+      status: nextState.status
+    }
+  });
+}
+
+async function promoteRemainingGuest(roomId: string, inviteCode: string, current: RoomPresenceState) {
+  if (!current.guestName) {
+    return current;
+  }
+
+  const promotedState: RoomPresenceState = {
+    roomId,
+    inviteCode,
+    status: "waiting",
+    hostName: current.guestName,
+    guestName: undefined,
+    hostReady: false,
+    guestReady: false,
+    countdownEndsAt: undefined
+  };
+
+  await prisma.match.update({
+    where: {
+      inviteCode
+    },
+    data: {
+      hostName: current.guestName,
+      guestName: null,
+      status: "waiting"
+    }
+  });
+
+  const socketsInRoom = await io.in(roomId).fetchSockets();
+
+  for (const roomSocket of socketsInRoom) {
+    roomSocket.data.role = "host";
+    roomSocket.emit("room:role-updated", "host");
+  }
+
+  return promotedState;
+}
+
+async function handleRoomDeparture(socket: Parameters<Parameters<typeof io.on>[1]>[0]) {
+  const roomId = socket.data.roomId as string | undefined;
+  const role = socket.data.role as "host" | "guest" | undefined;
+  const inviteCode = socket.data.inviteCode as string | undefined;
+
+  if (!roomId || !role || !inviteCode || socket.data.departureHandled) {
+    return;
+  }
+
+  socket.data.departureHandled = true;
+  clearCountdown(roomId);
+  const current = roomPresence.get(roomId);
+
+  if (!current) {
+    return;
+  }
+
+  let nextState: RoomPresenceState | null = null;
+
+  if (role === "host" && current.guestName) {
+    nextState = await promoteRemainingGuest(roomId, inviteCode, current);
+    roomPresence.set(roomId, nextState);
+  } else {
+    nextState = clearRoomPresence(roomId, role);
+    if (nextState) {
+      await persistRoomAfterDisconnect(inviteCode, nextState);
+    }
+  }
+
+  if (nextState) {
+    emitRoomState(roomId, {
+      ...nextState,
+      inviteCode
+    });
+  }
+}
+
 function scheduleCountdown(roomId: string, inviteCode: string, countdownEndsAt: number) {
   clearCountdown(roomId);
 
@@ -136,12 +257,13 @@ io.on("connection", (socket) => {
     message: "CodeRoyale socket server connected"
   });
 
-  socket.on("room:join", (payload: { roomId: string; inviteCode: string; role: "host" | "guest"; handle: string }) => {
+  socket.on("room:join", async (payload: { roomId: string; inviteCode: string; role: "host" | "guest"; handle: string }) => {
     socket.join(payload.roomId);
     socket.data.roomId = payload.roomId;
     socket.data.role = payload.role;
     socket.data.inviteCode = payload.inviteCode;
 
+    await persistNamesForJoin(payload.inviteCode, payload.role, payload.handle);
     const nextState = upsertRoomPresence(payload.roomId, payload.inviteCode, payload.role, payload.handle);
     emitRoomState(payload.roomId, nextState);
   });
@@ -196,24 +318,14 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("disconnect", () => {
-    const roomId = socket.data.roomId as string | undefined;
-    const role = socket.data.role as "host" | "guest" | undefined;
-    const inviteCode = socket.data.inviteCode as string | undefined;
+  socket.on("room:leave", async (done?: () => void) => {
+    await handleRoomDeparture(socket);
+    done?.();
+    socket.disconnect(true);
+  });
 
-    if (!roomId || !role || !inviteCode) {
-      return;
-    }
-
-    clearCountdown(roomId);
-    const nextState = clearRoomPresence(roomId, role);
-
-    if (nextState) {
-      emitRoomState(roomId, {
-        ...nextState,
-        inviteCode
-      });
-    }
+  socket.on("disconnect", async () => {
+    await handleRoomDeparture(socket);
   });
 });
 

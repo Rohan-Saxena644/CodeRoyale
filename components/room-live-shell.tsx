@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
 import type { Route } from "next";
@@ -44,8 +44,8 @@ export function RoomLiveShell({
   initialCountdownEndsAt
 }: RoomLiveShellProps) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
   const socketRef = useRef<Socket | null>(null);
+  const [currentViewerRole, setCurrentViewerRole] = useState<"host" | "guest">(viewerRole);
   const [presence, setPresence] = useState<RoomPresenceState>({
     roomId,
     inviteCode,
@@ -70,7 +70,7 @@ export function RoomLiveShell({
     [guestName, hostName, inviteCode, roomId, viewerRole]
   );
 
-  const isViewerReady = viewerRole === "host" ? presence.hostReady : presence.guestReady;
+  const isViewerReady = currentViewerRole === "host" ? presence.hostReady : presence.guestReady;
 
   function handleReadyToggle() {
     if (connectionState !== "connected") {
@@ -81,14 +81,22 @@ export function RoomLiveShell({
     socketRef.current?.emit("player:ready", {
       roomId,
       inviteCode,
-      role: viewerRole,
+      role: currentViewerRole,
       ready: !isViewerReady
     });
   }
 
   function handleLeaveRoom() {
-    socketRef.current?.disconnect();
-    router.push("/match" as Route);
+    const socket = socketRef.current;
+
+    if (!socket) {
+      router.push("/match" as Route);
+      return;
+    }
+
+    socket.emit("room:leave", () => {
+      router.push("/match" as Route);
+    });
   }
 
   useEffect(() => {
@@ -106,14 +114,15 @@ export function RoomLiveShell({
       setConnectionState("disconnected");
     });
 
+    socket.on("room:role-updated", (nextRole: "host" | "guest") => {
+      setCurrentViewerRole(nextRole);
+      setIsReadyPending(false);
+    });
+
     socket.on("room:state", (nextPresence: RoomPresenceState) => {
       if (nextPresence.roomId !== roomId) {
         return;
       }
-
-      startTransition(() => {
-        router.refresh();
-      });
 
       setPresence((current) => ({
         roomId: nextPresence.roomId,
@@ -132,7 +141,7 @@ export function RoomLiveShell({
       socketRef.current = null;
       socket.disconnect();
     };
-  }, [joinPayload, roomId, router, startTransition]);
+  }, [joinPayload, roomId]);
 
   useEffect(() => {
     if (!presence.countdownEndsAt || presence.status !== "countdown") {
@@ -159,7 +168,7 @@ export function RoomLiveShell({
       inviteCode={inviteCode}
       hostName={presence.hostName ?? hostName}
       guestName={presence.guestName}
-      viewerRole={viewerRole}
+      viewerRole={currentViewerRole}
       config={config}
       matchStatus={presence.status}
       hostReady={presence.hostReady}
