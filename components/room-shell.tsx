@@ -8,9 +8,18 @@ type RoomShellProps = {
   guestName?: string;
   viewerRole: "host" | "guest";
   config: MatchConfig;
+  connectionState?: "connecting" | "connected" | "disconnected";
 };
 
-export function RoomShell({ roomId, inviteCode, hostName, guestName, viewerRole, config }: RoomShellProps) {
+export function RoomShell({
+  roomId,
+  inviteCode,
+  hostName,
+  guestName,
+  viewerRole,
+  config,
+  connectionState = "disconnected"
+}: RoomShellProps) {
   const roomHeadline = guestName ? "Both players are in the room" : "Waiting for opponent";
 
   return (
@@ -59,8 +68,8 @@ export function RoomShell({ roomId, inviteCode, hostName, guestName, viewerRole,
         <div className="mt-8 rounded-[24px] border border-gold/35 bg-gold/10 p-5">
           <p className="text-sm font-semibold text-gold">Planned next for this room</p>
           <ul className="mt-3 space-y-2 text-sm text-white/78">
-            <li>Socket event flow: `player:join`, `player:ready`, `match:countdown`, `match:start`</li>
-            <li>Guest joins should appear live for the host without copying a full URL manually</li>
+            <li>Socket event flow now updates room presence live through `room:state`</li>
+            <li>Next up: add `player:ready`, `match:countdown`, and `match:start` transitions</li>
             <li>Realtime transition to editor room once both players are present</li>
           </ul>
         </div>
@@ -89,6 +98,20 @@ export function RoomShell({ roomId, inviteCode, hostName, guestName, viewerRole,
             <div className="flex justify-between gap-4">
               <dt className="text-white/55">Viewer role</dt>
               <dd className="font-medium capitalize text-white">{viewerRole}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-white/55">Socket</dt>
+              <dd
+                className={`font-medium capitalize ${
+                  connectionState === "connected"
+                    ? "text-lime"
+                    : connectionState === "connecting"
+                      ? "text-gold"
+                      : "text-coral"
+                }`}
+              >
+                {connectionState}
+              </dd>
             </div>
           </dl>
         </div>

@@ -1,5 +1,5 @@
 import { Header } from "@/components/header";
-import { RoomShell } from "@/components/room-shell";
+import { RoomLiveShell } from "@/components/room-live-shell";
 import { getMatchByInviteCode } from "@/lib/match-store";
 import type { DevCategory, DuelLanguage, MatchConfig, ModeKind } from "@/lib/types";
 
@@ -42,7 +42,7 @@ export default async function RoomPage({ params, searchParams }: RoomPageProps) 
     <main className="pb-24">
       <Header />
       <section className="mx-auto mt-10 max-w-7xl px-6 lg:px-8">
-        <RoomShell
+        <RoomLiveShell
           roomId={roomId}
           inviteCode={inviteCode}
           hostName={storedMatch?.hostName ?? (readSingle(query.host) ?? "Host")}

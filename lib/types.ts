@@ -41,6 +41,12 @@ export interface StoredMatch extends MatchRecord {
   guestName?: string;
 }
 
+export interface RoomPresenceState {
+  roomId: string;
+  hostName?: string;
+  guestName?: string;
+}
+
 export interface PhaseTask {
   id: string;
   title: string;
