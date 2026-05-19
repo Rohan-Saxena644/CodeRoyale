@@ -16,6 +16,7 @@ const io = new Server(httpServer, {
 
 const roomPresence = new Map<string, RoomPresenceState>();
 const countdownTimers = new Map<string, NodeJS.Timeout>();
+const roomCodeState = new Map<string, { hostCode: string; guestCode: string }>();
 
 function upsertRoomPresence(roomId: string, inviteCode: string, role: "host" | "guest", handle: string): RoomPresenceState {
   const current: RoomPresenceState = roomPresence.get(roomId) ?? {
@@ -95,6 +96,13 @@ function clearCountdown(roomId: string) {
 function emitRoomState(roomId: string, nextState: RoomPresenceState) {
   roomPresence.set(roomId, nextState);
   io.to(roomId).emit("room:state", nextState);
+}
+
+function getRoomCodeState(roomId: string) {
+  return roomCodeState.get(roomId) ?? {
+    hostCode: "",
+    guestCode: ""
+  };
 }
 
 async function persistNamesForJoin(inviteCode: string, role: "host" | "guest", handle: string) {
@@ -322,6 +330,46 @@ io.on("connection", (socket) => {
     await handleRoomDeparture(socket);
     done?.();
     socket.disconnect(true);
+  });
+
+  socket.on("duel:join", (payload: { roomId: string; role: "host" | "guest"; code: string }) => {
+    const current = getRoomCodeState(payload.roomId);
+    const nextState =
+      payload.role === "host"
+        ? {
+            ...current,
+            hostCode: payload.code
+          }
+        : {
+            ...current,
+            guestCode: payload.code
+          };
+
+    roomCodeState.set(payload.roomId, nextState);
+    socket.to(payload.roomId).emit("code:state", {
+      role: payload.role,
+      code: payload.code
+    });
+  });
+
+  socket.on("code:sync", (payload: { roomId: string; role: "host" | "guest"; code: string }) => {
+    const current = getRoomCodeState(payload.roomId);
+    const nextState =
+      payload.role === "host"
+        ? {
+            ...current,
+            hostCode: payload.code
+          }
+        : {
+            ...current,
+            guestCode: payload.code
+          };
+
+    roomCodeState.set(payload.roomId, nextState);
+    socket.to(payload.roomId).emit("code:state", {
+      role: payload.role,
+      code: payload.code
+    });
   });
 
   socket.on("disconnect", async () => {

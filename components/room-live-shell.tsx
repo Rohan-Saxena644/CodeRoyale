@@ -124,6 +124,17 @@ export function RoomLiveShell({
         return;
       }
 
+      if (nextPresence.status === "active") {
+        router.push(
+          `/duel/${roomId}?invite=${inviteCode}&host=${encodeURIComponent(nextPresence.hostName ?? hostName)}&guest=${encodeURIComponent(
+            nextPresence.guestName ?? guestName ?? ""
+          )}&mode=${config.mode}&difficulty=${config.difficulty}&track=${config.duelLanguage ?? config.devCategory ?? "javascript"}&role=${
+            currentViewerRole
+          }` as Route
+        );
+        return;
+      }
+
       setPresence((current) => ({
         roomId: nextPresence.roomId,
         inviteCode: nextPresence.inviteCode ?? current.inviteCode,
@@ -141,7 +152,7 @@ export function RoomLiveShell({
       socketRef.current = null;
       socket.disconnect();
     };
-  }, [joinPayload, roomId]);
+  }, [config.devCategory, config.difficulty, config.duelLanguage, config.mode, guestName, hostName, inviteCode, joinPayload, roomId, router, currentViewerRole]);
 
   useEffect(() => {
     if (!presence.countdownEndsAt || presence.status !== "countdown") {
