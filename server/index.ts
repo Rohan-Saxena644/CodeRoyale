@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import express from "express";
 import { Server } from "socket.io";
 import { nextMatchStatus } from "../lib/match-state";
-import { prisma } from "../lib/prisma";
+import { prisma } from "../lib/prisma-server";
 import type { RoomPresenceState } from "../lib/types";
 
 const app = express();
