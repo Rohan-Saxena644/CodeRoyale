@@ -198,12 +198,19 @@ async function handleRoomDeparture(socket: Parameters<Parameters<typeof io.on>[1
   }
 
   socket.data.departureHandled = true;
-  clearCountdown(roomId);
   const current = roomPresence.get(roomId);
 
   if (!current) {
     return;
   }
+
+  // If the match is already active, the player is navigating to the duel room —
+  // not actually abandoning. Bail out so we don't reset presence and strand the other player.
+  if (current.status === "active") {
+    return;
+  }
+
+  clearCountdown(roomId);
 
   let nextState: RoomPresenceState | null = null;
 

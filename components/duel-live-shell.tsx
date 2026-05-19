@@ -160,139 +160,140 @@ export function DuelLiveShell({
     };
   }, [inviteCode, myCode, roomId, router, selfHandle, viewerRoleState]);
 
+  const myHandle = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
+  const opponentHandle = viewerRoleState === "host" ? (guestName ?? "Opponent") : hostName;
+
   return (
     <main className="pb-16">
-      <section className="mx-auto mt-8 max-w-7xl px-6 lg:px-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-gold">Phase 2 duel room</p>
-            <h1 className="mt-2 text-4xl font-semibold text-white">Live editor battle</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-white/68">
-              This is the first editor shell for CodeRoyale. You can type in the primary editor while the opponent
-              pane mirrors the other player through socket sync.
-            </p>
-          </div>
+      <section className="mx-auto mt-6 max-w-[1600px] px-4 lg:px-6">
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white/75">
-              Role: <span className="font-semibold text-white">{viewerRoleState}</span>
-            </div>
-            <div className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white/75">
-              Socket:{" "}
-              <span className={connectionState === "connected" ? "font-semibold text-lime" : "font-semibold text-gold"}>
-                {connectionState}
-              </span>
-            </div>
+        {/* ── Top bar ── */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+              {config.mode}
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
+              {config.duelLanguage ?? config.devCategory}
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold capitalize text-white/60">
+              {config.difficulty}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+              connectionState === "connected"
+                ? "border-lime/30 bg-lime/10 text-lime"
+                : "border-gold/30 bg-gold/10 text-gold"
+            }`}>
+              {connectionState === "connected" ? "● live" : "● connecting"}
+            </span>
             <button
               type="button"
               onClick={handleLeaveDuel}
-              className="rounded-full border border-white/15 px-5 py-2 font-semibold text-white/82"
+              className="rounded-full border border-white/15 px-4 py-1.5 text-sm font-semibold text-white/70 transition hover:border-coral/50 hover:text-white"
             >
-              Leave duel
+              Leave
             </button>
           </div>
         </div>
 
-        <section className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
-          <aside className="space-y-6">
-            <div className="card-border rounded-[28px] border border-white/10 bg-panel/92 p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Problem</p>
-              <h2 className="mt-3 text-2xl font-semibold text-white">Placeholder challenge</h2>
-              <p className="mt-4 text-sm leading-6 text-white/72">
-                For this slice we are intentionally holding a placeholder prompt here. Phase 3 will swap this panel
-                over to generated competitive or dev-mode tasks from the API.
+        {/* ── Problem panel ── */}
+        <div className="mb-4 rounded-[20px] border border-white/10 bg-panel/92 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Problem</p>
+              <h2 className="mt-1.5 text-xl font-semibold text-white">Placeholder challenge</h2>
+              <p className="mt-2 text-sm leading-6 text-white/65">
+                Phase 3 will swap this for a generated problem. For now, write a function that reads a line of input and prints it reversed.
               </p>
-              <div className="mt-5 rounded-2xl border border-gold/30 bg-gold/10 p-4 text-sm text-gold">
-                Competitive placeholder: read input, transform it correctly, and print the expected output.
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2">
+                <span className="text-white/45">Host</span>
+                <span className="ml-2 font-semibold text-white">{hostName}</span>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2">
+                <span className="text-white/45">Guest</span>
+                <span className="ml-2 font-semibold text-white">{guestName ?? "—"}</span>
+              </div>
+              <div className="rounded-2xl border border-gold/30 bg-gold/10 px-4 py-2 font-semibold text-gold">
+                30:00
               </div>
             </div>
+          </div>
+          <div className="mt-3 rounded-xl border border-gold/20 bg-gold/8 px-4 py-2.5 text-sm text-gold/90">
+            <span className="font-semibold">Example:</span> input <code className="rounded bg-white/10 px-1">{"hello"}</code> → output <code className="rounded bg-white/10 px-1">{"olleh"}</code>
+          </div>
+        </div>
 
-            <div className="card-border rounded-[28px] border border-white/10 bg-black/20 p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Match info</p>
-              <dl className="mt-4 space-y-4 text-sm">
-                <div className="flex justify-between gap-4">
-                  <dt className="text-white/55">Host</dt>
-                  <dd className="font-medium text-white">{hostName}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-white/55">Guest</dt>
-                  <dd className="font-medium text-white">{guestName ?? "Waiting"}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-white/55">Mode</dt>
-                  <dd className="font-medium capitalize text-white">{config.mode}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-white/55">Track</dt>
-                  <dd className="font-medium text-white">{config.duelLanguage ?? config.devCategory}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-white/55">Timer</dt>
-                  <dd className="font-medium text-gold">30:00 placeholder</dd>
-                </div>
-              </dl>
-            </div>
-          </aside>
+        {/* ── Side-by-side editors ── */}
+        <div className="grid gap-4 lg:grid-cols-2">
 
-          <section className="grid gap-6">
-            <div className="card-border rounded-[28px] border border-white/10 bg-panel/92 p-4">
-              <div className="mb-3 flex items-center justify-between gap-4 px-2">
-                <div>
-                  <p className="text-sm font-semibold text-white">Your editor</p>
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/45">{editorLanguage}</p>
-                </div>
-                <div className="rounded-full border border-lime/25 bg-lime/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-lime">
-                  Writable
-                </div>
+          {/* Your editor */}
+          <div className="rounded-[20px] border border-lime/25 bg-panel/92 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3 px-1">
+              <div>
+                <p className="text-sm font-semibold text-white">{myHandle}</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-white/40">you · {editorLanguage}</p>
               </div>
-              <div className="overflow-hidden rounded-[22px] border border-white/10">
-                <Editor
-                  height="420px"
-                  language={editorLanguage}
-                  theme="vs-dark"
-                  value={myCode}
-                  onChange={handleCodeChange}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 14,
-                    wordWrap: "on",
-                    automaticLayout: true
-                  }}
-                />
-              </div>
+              <span className="rounded-full border border-lime/30 bg-lime/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime">
+                writable
+              </span>
             </div>
+            <div className="overflow-hidden rounded-[14px] border border-white/10">
+              <Editor
+                height="520px"
+                language={editorLanguage}
+                theme="vs-dark"
+                value={myCode}
+                onChange={handleCodeChange}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  wordWrap: "on",
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  padding: { top: 12, bottom: 12 },
+                }}
+              />
+            </div>
+          </div>
 
-            <div className="card-border rounded-[28px] border border-white/10 bg-black/20 p-4">
-              <div className="mb-3 flex items-center justify-between gap-4 px-2">
-                <div>
-                  <p className="text-sm font-semibold text-white">Opponent view</p>
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    {viewerRoleState === "host" ? guestName ?? "Opponent" : hostName}
-                  </p>
-                </div>
-                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-                  Read only
-                </div>
+          {/* Opponent editor */}
+          <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3 px-1">
+              <div>
+                <p className="text-sm font-semibold text-white/75">{opponentHandle}</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-white/40">opponent · {editorLanguage}</p>
               </div>
-              <div className="overflow-hidden rounded-[22px] border border-white/10">
-                <Editor
-                  height="320px"
-                  language={editorLanguage}
-                  theme="vs-dark"
-                  value={opponentCode}
-                  options={{
-                    readOnly: true,
-                    minimap: { enabled: false },
-                    fontSize: 14,
-                    wordWrap: "on",
-                    automaticLayout: true
-                  }}
-                />
-              </div>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+                read only
+              </span>
             </div>
-          </section>
-        </section>
+            <div className="overflow-hidden rounded-[14px] border border-white/10">
+              <Editor
+                height="520px"
+                language={editorLanguage}
+                theme="vs-dark"
+                value={opponentCode}
+                options={{
+                  readOnly: true,
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  wordWrap: "on",
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  padding: { top: 12, bottom: 12 },
+                }}
+              />
+            </div>
+          </div>
+
+        </div>
+
       </section>
     </main>
   );
 }
+
