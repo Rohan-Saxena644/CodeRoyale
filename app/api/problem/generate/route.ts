@@ -14,9 +14,9 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 const problemSchema = z.object({
   matchId: z.string().min(1),
-  mode: z.enum(["competitive", "dev"]),
-  difficulty: z.enum(["easy", "medium", "hard"]),
-  track: z.string().min(1),
+//   mode: z.enum(["competitive", "dev"]),
+//   difficulty: z.enum(["easy", "medium", "hard"]),
+//   track: z.string().min(1),
 });
 
 
@@ -70,19 +70,21 @@ export async function POST(request: Request) {
     );
   }
 
-    const { matchId,difficulty,track } = result.data;
+    const { matchId } = result.data;
 
     const match = await prisma.match.findUnique({
     where: { id: matchId },
     });
 
-    
     if (!match) {
     return NextResponse.json(
         { error: "Match not found" },
         { status: 404 }
     );
     }
+    
+    const difficulty = match.difficulty as "easy"|"medium"|"hard"
+    const track = match.duelLanguage ?? match.devCategory ?? "javascript"
 
 
     try{
