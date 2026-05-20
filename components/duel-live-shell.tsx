@@ -215,11 +215,23 @@ export function DuelLiveShell({
         <div className="mb-4 rounded-[20px] border border-white/10 bg-panel/92 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Problem</p>
-              <h2 className="mt-1.5 text-xl font-semibold text-white">Placeholder challenge</h2>
-              <p className="mt-2 text-sm leading-6 text-white/65">
-                Phase 3 will swap this for a generated problem. For now, write a function that reads a line of input and prints it reversed.
-              </p>
+              {problem ? (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Problem</p>
+                  <h2 className="mt-1.5 text-xl font-semibold text-white">{problem.title}</h2>
+                  <p className="mt-2 text-sm leading-6 text-white/65">{problem.statement}</p>
+                  <ul className="mt-3 space-y-1">
+                    {problem.constraints.map((c, i) => (
+                      <li key={i} className="text-xs text-white/50">• {c}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Problem</p>
+                  <p className="mt-2 text-sm text-white/40 animate-pulse">Generating problem...</p>
+                </>
+              )}
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2">
@@ -235,9 +247,15 @@ export function DuelLiveShell({
               </div>
             </div>
           </div>
-          <div className="mt-3 rounded-xl border border-gold/20 bg-gold/8 px-4 py-2.5 text-sm text-gold/90">
-            <span className="font-semibold">Example:</span> input <code className="rounded bg-white/10 px-1">{"hello"}</code> → output <code className="rounded bg-white/10 px-1">{"olleh"}</code>
-          </div>
+
+          {problem && problem.examples.map((ex, i) => (
+            <div key={i} className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
+              <p className="text-white/50">Example {i + 1}</p>
+              <p className="mt-1 text-white">Input: <code>{ex.input}</code></p>
+              <p className="text-white">Output: <code>{ex.output}</code></p>
+              {ex.explanation && <p className="mt-1 text-white/50">{ex.explanation}</p>}
+            </div>
+          ))}
         </div>
 
         {/* ── Side-by-side editors ── */}
