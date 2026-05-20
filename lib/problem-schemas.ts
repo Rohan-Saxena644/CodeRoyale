@@ -28,7 +28,7 @@ export const competitiveProblemSchema = z.object({
     language: z.enum(["python", "javascript", "cpp", "go", "rust"]),
     code: z.string().min(12),
     approach: z.string().min(20)
-  }),
+  }).optional(),
   hints: z.array(z.string()).optional(),
   sourceKind: z.enum(["generated", "permissive"])
 });
