@@ -65,6 +65,14 @@ export function DuelLiveShell({
   const [myCode, setMyCode] = useState(starterCode);
   const [opponentCode, setOpponentCode] = useState(starterCode);
   const [viewerRoleState, setViewerRoleState] = useState<"host" | "guest">(viewerRole);
+  const [problem, setProblem] = useState<null | {
+    title: string;
+    statement: string;
+    difficulty: string;
+    constraints: string[];
+    examples: { input: string; output: string; explanation?: string }[];
+    visibleTestCases: { input: string; expectedOutput: string }[];
+  }>(null);
 
   const selfHandle = useMemo(
     () => (viewerRole === "host" ? hostName : guestName ?? "Guest"),
@@ -149,6 +157,11 @@ export function DuelLiveShell({
 
       setOpponentCode(payload.code);
     });
+
+    socket.on("problem:ready", (incoming) => {
+      setProblem(incoming);
+    });
+
 
     return () => {
       if (syncTimeoutRef.current) {
