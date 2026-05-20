@@ -253,6 +253,24 @@ function scheduleCountdown(roomId: string, inviteCode: string, countdownEndsAt: 
     emitRoomState(roomId, {
       ...nextState
     });
+    // 3b: trigger problem generation and emit to room
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  fetch(`${appUrl}/api/problem/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ matchId: roomId }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (data.problem) {
+        io.to(roomId).emit("problem:ready", data.problem);
+      }
+    })
+    .catch((err) => {
+      console.error("[socket] problem generation failed:", err);
+    });
+    
     countdownTimers.delete(roomId);
   }, delay);
 
