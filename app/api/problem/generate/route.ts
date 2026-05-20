@@ -57,6 +57,27 @@ Respond with ONLY valid JSON, no markdown, no explanation:
 }`;
 }
 
+async function generateWithRetry(prompt: string, retries = 3): Promise<string> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await model.generateContent(prompt);
+      return response.response.text();
+    } catch (err: unknown) {
+      const isLast = attempt === retries;
+      const is503 = String(err).includes("503");
+
+      if (is503 && !isLast) {
+        const waitMs = attempt * 2000;
+        await new Promise((res) => setTimeout(res, waitMs));
+        continue;
+      }
+
+      throw err;
+    }
+  }
+  throw new Error("Generation failed after retries");
+}
+
 export async function POST(request: Request) {
   const payload = await request.json();
   const result = problemSchema.safeParse(payload);
@@ -90,8 +111,7 @@ export async function POST(request: Request) {
     try{
 
     const prompt = buildPrompt(difficulty, track);
-    const response = await model.generateContent(prompt);
-    const rawText = response.response.text();
+    const rawText = await generateWithRetry(prompt);
 
     const cleaned = rawText
     .replace(/^```json\s*/i, "")
@@ -124,7 +144,7 @@ export async function POST(request: Request) {
         prompt: validated.data.statement,
         difficulty: validated.data.difficulty,
         sourceKind: validated.data.sourceKind,
-        generatorVersion: "gemini-2.0-flash",
+        generatorVersion: "gemini-2.5-flash",
         rawJson: validated.data as object,
         matchId,
     },
