@@ -106,27 +106,34 @@ function getRoomCodeState(roomId: string) {
 }
 
 async function persistNamesForJoin(inviteCode: string, role: "host" | "guest", handle: string) {
-  if (role === "host") {
+  try{
+
+    if (role === "host") {
+      await prisma.match.update({
+        where: {
+          inviteCode
+        },
+        data: {
+          hostName: handle
+        }
+      });
+      return;
+    }
+
     await prisma.match.update({
       where: {
         inviteCode
       },
       data: {
-        hostName: handle
+        guestName: handle,
+        status: "waiting"
       }
     });
-    return;
-  }
 
-  await prisma.match.update({
-    where: {
-      inviteCode
-    },
-    data: {
-      guestName: handle,
-      status: "waiting"
-    }
-  });
+  }catch(err){
+    console.warn("[persistNamesForJoin] skipped — match not found for inviteCode:", inviteCode)
+  }
+  
 }
 
 async function persistRoomAfterDisconnect(inviteCode: string, nextState: RoomPresenceState) {
@@ -361,7 +368,8 @@ io.on("connection", (socket) => {
     socket.disconnect(true);
   });
 
-  socket.on("duel:join", (payload: { roomId: string; role: "host" | "guest"; code: string }) => {
+  socket.on("duel:join", async (payload: { roomId: string; role: "host" | "guest"; code: string }) => {
+    socket.join(payload.roomId);  // make sure they're in the room
     const current = getRoomCodeState(payload.roomId);
     const nextState =
       payload.role === "host"
@@ -379,6 +387,20 @@ io.on("connection", (socket) => {
       role: payload.role,
       code: payload.code
     });
+
+    // Send existing problem directly to this socket if already generated
+    try {
+      const match = await prisma.match.findUnique({
+        where: { id: payload.roomId },
+        include: { problem: true }
+      });
+      if (match?.problem) {
+        socket.emit("problem:ready", match.problem);
+      }
+    } catch (err) {
+      console.warn("[duel:join] could not fetch problem:", err);
+    }
+
   });
 
   socket.on("code:sync", (payload: { roomId: string; role: "host" | "guest"; code: string }) => {

@@ -255,7 +255,7 @@ export function DuelLiveShell({
               <p className="text-white/50">Example {i + 1}</p>
               <p className="mt-1 text-white">Input: <code>{ex.input}</code></p>
               <p className="text-white">Output: <code>{ex.output}</code></p>
-              {ex.explanation && <p className="mt-1 text-white/50">{ex.explanation}</p>}
+              {/* {ex.explanation && <p className="mt-1 text-white/50">{ex.explanation}</p>} */}
             </div>
           ))}
         </div>
