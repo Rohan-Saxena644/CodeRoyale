@@ -75,6 +75,8 @@ export function DuelLiveShell({
     };
   }>(null);
 
+  const [timeLeft, setTimeLeft] = useState(30 * 60); // 30 minutes in seconds
+
   const selfHandle = useMemo(
     () => (viewerRole === "host" ? hostName : guestName ?? "Guest"),
     [guestName, hostName, viewerRole]
@@ -175,6 +177,24 @@ export function DuelLiveShell({
     };
   }, [inviteCode, myCode, roomId, router, selfHandle, viewerRoleState]);
 
+
+  useEffect(() => {
+    if (!problem) return; // don't start until problem is ready
+
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [problem]); // starts when problem arrives
+
+
   const myHandle = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
   const opponentHandle = viewerRoleState === "host" ? (guestName ?? "Opponent") : hostName;
 
@@ -245,7 +265,7 @@ export function DuelLiveShell({
                 <span className="ml-2 font-semibold text-white">{guestName ?? "—"}</span>
               </div>
               <div className="rounded-2xl border border-gold/30 bg-gold/10 px-4 py-2 font-semibold text-gold">
-                30:00
+                {String(Math.floor(timeLeft / 60)).padStart(2, "0")}:{String(timeLeft % 60).padStart(2, "0")}
               </div>
             </div>
           </div>
