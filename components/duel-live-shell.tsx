@@ -234,7 +234,7 @@ export function DuelLiveShell({
         </div>
 
         {/* ── Problem panel ── */}
-        <div className="mb-4 rounded-[20px] border border-white/10 bg-panel/92 p-5">
+        <div className="mb-4 max-h-[380px] overflow-y-auto rounded-[20px] border border-white/10 bg-panel/92 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex-1">
               {problem ? (
