@@ -9,7 +9,13 @@ import { competitiveProblemSchema } from "@/lib/problem-schemas";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-flash" ,
+    generationConfig: {
+        // @ts-ignore
+        thinkingConfig: { thinkingBudget: 0 }
+    }
+});
 
 
 const problemSchema = z.object({
@@ -93,6 +99,8 @@ export async function POST(request: Request) {
 
     const { matchId } = result.data;
 
+    try{
+
     const match = await prisma.match.findUnique({
     where: { id: matchId },
     });
@@ -103,12 +111,17 @@ export async function POST(request: Request) {
         { status: 404 }
     );
     }
+
+    const existing = await prisma.problem.findUnique({
+        where: { matchId },
+    });
+    if (existing) {
+        return NextResponse.json({ problem: existing });
+    }
     
     const difficulty = match.difficulty as "easy"|"medium"|"hard"
     const track = match.duelLanguage ?? match.devCategory ?? "javascript"
 
-
-    try{
 
     const prompt = buildPrompt(difficulty, track);
     const rawText = await generateWithRetry(prompt);
@@ -153,6 +166,7 @@ export async function POST(request: Request) {
     return NextResponse.json({problem})
 
     }catch(err){
+        console.error("[generate-problem] FULL ERROR:", JSON.stringify(err, null, 2), String(err));
         console.error("[generate-problem]",err);
         return NextResponse.json(
             {error: "Problem generation failed", detail: String(err)},

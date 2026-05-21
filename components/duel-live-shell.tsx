@@ -67,11 +67,12 @@ export function DuelLiveShell({
   const [viewerRoleState, setViewerRoleState] = useState<"host" | "guest">(viewerRole);
   const [problem, setProblem] = useState<null | {
     title: string;
-    statement: string;
+    prompt: string;
     difficulty: string;
-    constraints: string[];
-    examples: { input: string; output: string; explanation?: string }[];
-    visibleTestCases: { input: string; expectedOutput: string }[];
+    rawJson: {
+      constraints?: string[];
+      examples?: { input: string; output: string; explanation?: string }[];
+    };
   }>(null);
 
   const selfHandle = useMemo(
@@ -159,6 +160,7 @@ export function DuelLiveShell({
     });
 
     socket.on("problem:ready", (incoming) => {
+      console.log("problem:ready payload:", JSON.stringify(incoming, null, 2));
       setProblem(incoming);
     });
 
@@ -219,9 +221,9 @@ export function DuelLiveShell({
                 <>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Problem</p>
                   <h2 className="mt-1.5 text-xl font-semibold text-white">{problem.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-white/65">{problem.statement}</p>
+                  <p className="mt-2 text-sm leading-6 text-white/65">{problem.prompt}</p>
                   <ul className="mt-3 space-y-1">
-                    {problem.constraints.map((c, i) => (
+                    {problem.rawJson?.constraints && problem.rawJson.constraints.map((c:string, i: number) => (
                       <li key={i} className="text-xs text-white/50">• {c}</li>
                     ))}
                   </ul>
@@ -248,7 +250,7 @@ export function DuelLiveShell({
             </div>
           </div>
 
-          {problem && problem.examples.map((ex, i) => (
+          {problem && problem.rawJson?.examples &&problem.rawJson.examples.map((ex: { input: string; output: string; explanation?: string }, i: number) => (
             <div key={i} className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
               <p className="text-white/50">Example {i + 1}</p>
               <p className="mt-1 text-white">Input: <code>{ex.input}</code></p>
