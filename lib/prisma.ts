@@ -1,17 +1,29 @@
-import { Pool, neonConfig } from "@neondatabase/serverless";
+import { neonConfig, Pool } from "@neondatabase/serverless";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "@prisma/client";
 
-// Only inject ws in Node.js — not in edge runtime or browser
 if (typeof WebSocket === "undefined") {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   neonConfig.webSocketConstructor = require("ws");
 }
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaNeon(pool);
+const globalForPrisma = global as unknown as { 
+  prisma: PrismaClient;
+  pool: Pool;
+};
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-export const prisma =
-  globalForPrisma.prisma ?? new PrismaClient({ adapter });
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+function createClient() {
+  const pool = new Pool({ 
+    connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 0, // disable idle timeout — keep connection alive
+  });
+  const adapter = new PrismaNeon(pool);
+  return new PrismaClient({ adapter });
+}
+
+if (!globalForPrisma.prisma) {
+  globalForPrisma.prisma = createClient();
+}
+
+export const prisma = globalForPrisma.prisma;
