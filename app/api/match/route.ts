@@ -25,7 +25,8 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-
+  
+  try{
   const match = await createMatchRecord(result.data.hostName, result.data.config);
   const track =
     result.data.config.mode === "competitive"
@@ -40,4 +41,13 @@ export async function POST(request: Request) {
     match,
     roomUrl
   });
+
+  }catch(err){
+    console.error("[api/match] error:", err);
+    return NextResponse.json(
+      { error: "Failed to create match", detail: String(err) },
+      { status: 500 }
+    );
+  }
+
 }

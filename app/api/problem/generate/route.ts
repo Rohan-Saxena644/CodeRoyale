@@ -33,9 +33,10 @@ Generate a coding problem as a JSON object.
 Requirements:
 - difficulty: "${difficulty}"
 - language: "${track}"
-- Solvable in under 30 minutes
-- At least 2 visible examples
-- At least 4 test cases (mix visible and hidden)
+- Keep the problem statement under 3 sentences
+- Exactly 2 examples
+- Exactly 4 test cases (2 visible, 2 hidden)
+- Keep all strings short and concise
 
 Respond with ONLY valid JSON, no markdown, no explanation:
 
