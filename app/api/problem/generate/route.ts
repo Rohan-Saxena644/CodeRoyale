@@ -11,9 +11,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const model = genAI.getGenerativeModel({ 
     model: "gemini-2.5-flash" ,
+    
     generationConfig: {
         // @ts-ignore
-        thinkingConfig: { thinkingBudget: 0 }
+        responseMimeType: "application/json",
+        // @ts-ignore
+        thinkingConfig: { thinkingBudget: 0 },
     }
 });
 
@@ -27,41 +30,36 @@ const problemSchema = z.object({
 
 
 function buildPrompt(difficulty: string, track: string): string {
-  return `You are a competitive programming problem author.
-Generate a coding problem as a JSON object.
-
-Requirements:
-- difficulty: "${difficulty}"
-- language: "${track}"
-- Keep the problem statement under 3 sentences
-- Exactly 2 examples
-- Exactly 4 test cases (2 visible, 2 hidden)
-- Keep all strings short and concise
-
-Respond with ONLY valid JSON, no markdown, no explanation:
+  return `Generate a coding problem as JSON. Be concise.
 
 {
   "mode": "competitive",
-  "title": "...",
-  "statement": "...",
+  "title": "short title",
+  "statement": "One sentence problem description. Input format. Output format.",
   "difficulty": "${difficulty}",
-  "constraints": ["...", "..."],
+  "constraints": ["constraint 1", "constraint 2"],
   "examples": [
-    { "input": "...", "output": "...", "explanation": "..." }
+    { "input": "example input", "output": "example output", "explanation": "brief" }
   ],
   "testCases": [
-    { "input": "...", "expectedOutput": "...", "isHidden": false },
-    { "input": "...", "expectedOutput": "...", "isHidden": false },
-    { "input": "...", "expectedOutput": "...", "isHidden": true },
-    { "input": "...", "expectedOutput": "...", "isHidden": true }
+    { "input": "test1", "expectedOutput": "out1", "isHidden": false },
+    { "input": "test2", "expectedOutput": "out2", "isHidden": false },
+    { "input": "test3", "expectedOutput": "out3", "isHidden": true },
+    { "input": "test4", "expectedOutput": "out4", "isHidden": true }
   ],
   "sourceKind": "generated",
   "referenceSolution": {
     "language": "${track}",
-    "code": "...",
-    "approach": "..."
-   }
-}`;
+    "code": "solution code here",
+    "approach": "one sentence"
+  }
+}
+
+Rules:
+- difficulty must be "${difficulty}"
+- statement must be under 2 sentences
+- Keep all strings short
+- Return ONLY the JSON object, nothing else`;
 }
 
 async function generateWithRetry(prompt: string, retries = 3): Promise<string> {

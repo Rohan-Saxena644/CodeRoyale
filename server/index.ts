@@ -137,6 +137,9 @@ async function persistNamesForJoin(inviteCode: string, role: "host" | "guest", h
 }
 
 async function persistRoomAfterDisconnect(inviteCode: string, nextState: RoomPresenceState) {
+
+  try{
+
   if (!nextState.hostName && !nextState.guestName) {
     await prisma.match.delete({
       where: {
@@ -156,6 +159,10 @@ async function persistRoomAfterDisconnect(inviteCode: string, nextState: RoomPre
       status: nextState.status
     }
   });
+
+  }catch(err){
+    console.warn("[persistRoomAfterDisconnect] skipped — match not found for inviteCode:", inviteCode)
+  }
 }
 
 async function promoteRemainingGuest(roomId: string, inviteCode: string, current: RoomPresenceState) {

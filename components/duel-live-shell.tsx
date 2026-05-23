@@ -75,6 +75,13 @@ export function DuelLiveShell({
     };
   }>(null);
 
+  const [verdict, setVerdict] = useState<null | {
+    verdict: string;
+    passedTests: number;
+    totalTests: number;
+  }>(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const [timeLeft, setTimeLeft] = useState(30 * 60); // 30 minutes in seconds
 
   const selfHandle = useMemo(
@@ -198,6 +205,29 @@ export function DuelLiveShell({
   const myHandle = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
   const opponentHandle = viewerRoleState === "host" ? (guestName ?? "Opponent") : hostName;
 
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchId: roomId,
+          role: viewerRoleState,
+          language: editorLanguage,
+          code: myCode,
+        }),
+      });
+      const data = await res.json();
+      setVerdict(data);
+    } catch (err) {
+      console.error("[submit]", err);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <main className="pb-16">
       <section className="mx-auto mt-6 max-w-[1600px] px-4 lg:px-6">
@@ -311,6 +341,24 @@ export function DuelLiveShell({
                 }}
               />
             </div>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="rounded-full border border-lime/40 bg-lime/15 px-4 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime transition hover:bg-lime/25 disabled:opacity-50"
+            >
+              {submitting ? "Running..." : "Submit"}
+            </button>
+
+            {verdict && (
+              <div className={`mt-3 rounded-xl border px-4 py-3 text-sm font-semibold ${
+                verdict.verdict === "AC"
+                  ? "border-lime/30 bg-lime/10 text-lime"
+                  : "border-red-500/30 bg-red-500/10 text-red-400"
+              }`}>
+                {verdict.verdict === "AC" ? "✓ Accepted" : "✗ Wrong Answer"} — {verdict.passedTests}/{verdict.totalTests} tests passed
+              </div>
+            )}
           </div>
 
           {/* Opponent editor */}
