@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { io, type Socket } from "socket.io-client";
 import Editor from "@monaco-editor/react";
 import type { MatchConfig } from "@/lib/types";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type DuelLiveShellProps = {
   roomId: string;
@@ -16,12 +18,38 @@ type DuelLiveShellProps = {
   config: MatchConfig;
 };
 
-type CodeStatePayload = {
-  roomId: string;
-  inviteCode: string;
-  role: "host" | "guest";
-  code: string;
+type Problem = {
+  title: string;
+  prompt: string;
+  difficulty: string;
+  rawJson: {
+    constraints?: string[];
+    examples?: { input: string; output: string; explanation?: string }[];
+  };
 };
+
+type Verdict = {
+  verdict: string;
+  passedTests: number;
+  totalTests: number;
+};
+
+type MatchResult = {
+  winnerRole: "host" | "guest" | "draw";
+  iWon: boolean;
+  isDraw: boolean;
+  reason?: "timeout" | "ac";
+};
+
+type EmoteToast = {
+  id: number;
+  emote: string;
+  fromRole: "host" | "guest";
+};
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const EMOTES = ["👏", "💀", "🔥", "😤", "🤝"];
 
 const starterTemplates: Record<string, string> = {
   javascript: `process.stdin.resume();
@@ -31,33 +59,23 @@ process.stdin.on('data', d => input += d);
 process.stdin.on('end', () => {
   const lines = input.trim().split('\\n');
   // Write your solution here
-  // Example: const nums = lines[0].split(' ').map(Number);
-
 });
 `,
-
   python: `import sys
 input_data = sys.stdin.read().strip()
 lines = input_data.split('\\n')
 # Write your solution here
-# Example: nums = list(map(int, lines[0].split()))
-
 `,
-
   cpp: `#include <bits/stdc++.h>
 using namespace std;
 
 int main() {
   ios_base::sync_with_stdio(false);
   cin.tie(NULL);
-  
   // Write your solution here
-  // Example: int n; cin >> n;
-  
   return 0;
 }
 `,
-
   go: `package main
 
 import (
@@ -70,11 +88,9 @@ func main() {
   reader := bufio.NewReader(os.Stdin)
   _ = reader
   // Write your solution here
-  // Example: fmt.Fscan(reader, &n)
   fmt.Println()
 }
 `,
-
   rust: `use std::io::{self, Read};
 
 fn main() {
@@ -82,14 +98,12 @@ fn main() {
   io::stdin().read_to_string(&mut input).unwrap();
   let mut lines = input.lines();
   // Write your solution here
-  // Example: let nums: Vec<i32> = lines.next().unwrap().split_whitespace()
-  //           .map(|x| x.parse().unwrap()).collect();
-
 }
 `,
-
-  default: `// Write your solution here\n`
+  default: `// Write your solution here\n`,
 };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getSocketUrl() {
   return process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
@@ -97,15 +111,12 @@ function getSocketUrl() {
 
 function getEditorLanguage(config: MatchConfig) {
   if (config.mode === "competitive") {
-    if (config.duelLanguage === "cpp") {
-      return "cpp";
-    }
-
     return config.duelLanguage ?? "javascript";
   }
-
   return "javascript";
 }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function DuelLiveShell({
   roomId,
@@ -113,101 +124,88 @@ export function DuelLiveShell({
   hostName,
   guestName,
   viewerRole,
-  config
+  config,
 }: DuelLiveShellProps) {
   const router = useRouter();
   const socketRef = useRef<Socket | null>(null);
   const syncTimeoutRef = useRef<number | null>(null);
+  const emoteCounterRef = useRef(0);
+
   const editorLanguage = getEditorLanguage(config);
   const starterCode = starterTemplates[editorLanguage] ?? starterTemplates.default;
+
   const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [myCode, setMyCode] = useState(starterCode);
   const [opponentCode, setOpponentCode] = useState(starterCode);
   const [viewerRoleState, setViewerRoleState] = useState<"host" | "guest">(viewerRole);
-  const [problem, setProblem] = useState<null | {
-    title: string;
-    prompt: string;
-    difficulty: string;
-    rawJson: {
-      constraints?: string[];
-      examples?: { input: string; output: string; explanation?: string }[];
-    };
-  }>(null);
-
-  const [verdict, setVerdict] = useState<null | {
-    verdict: string;
-    passedTests: number;
-    totalTests: number;
-  }>(null);
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const [timeLeft, setTimeLeft] = useState(30 * 60); // 30 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(30 * 60);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [emoteToasts, setEmoteToasts] = useState<EmoteToast[]>([]);
 
   const selfHandle = useMemo(
     () => (viewerRole === "host" ? hostName : guestName ?? "Guest"),
     [guestName, hostName, viewerRole]
   );
+  const myHandle = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
+  const opponentHandle = viewerRoleState === "host" ? (guestName ?? "Opponent") : hostName;
 
+  // ── Emote helper ────────────────────────────────────────────────────────────
+  const addEmoteToast = useCallback((emote: string, fromRole: "host" | "guest") => {
+    const id = ++emoteCounterRef.current;
+    setEmoteToasts((prev) => [...prev, { id, emote, fromRole }]);
+    setTimeout(() => {
+      setEmoteToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 2500);
+  }, []);
+
+  function sendEmote(emote: string) {
+    socketRef.current?.emit("emote:send", {
+      roomId,
+      emote,
+      fromRole: viewerRoleState,
+    });
+    // Also show it for yourself (smaller / different side)
+    addEmoteToast(emote, viewerRoleState);
+  }
+
+  // ── Code helpers ─────────────────────────────────────────────────────────────
   function emitCode(code: string) {
     socketRef.current?.emit("code:sync", {
       roomId,
       inviteCode,
       role: viewerRoleState,
-      code
-    } satisfies CodeStatePayload);
+      code,
+    });
   }
 
   function handleCodeChange(nextValue: string | undefined) {
     const nextCode = nextValue ?? "";
     setMyCode(nextCode);
-
-    if (syncTimeoutRef.current) {
-      window.clearTimeout(syncTimeoutRef.current);
-    }
-
-    syncTimeoutRef.current = window.setTimeout(() => {
-      emitCode(nextCode);
-    }, 90);
+    if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = window.setTimeout(() => emitCode(nextCode), 90);
   }
 
   function handleLeaveDuel() {
     const socket = socketRef.current;
-
-    if (!socket) {
-      router.push("/match" as Route);
-      return;
-    }
-
-    socket.emit("room:leave", () => {
-      router.push("/match" as Route);
-    });
+    if (!socket) { router.push("/match" as Route); return; }
+    socket.emit("room:leave", () => router.push("/match" as Route));
   }
 
+  // ── Socket setup ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const socket: Socket = io(getSocketUrl(), {
-      transports: ["websocket"]
-    });
+    const socket: Socket = io(getSocketUrl(), { transports: ["websocket"] });
     socketRef.current = socket;
 
     socket.on("connect", () => {
       setConnectionState("connected");
-      socket.emit("room:join", {
-        roomId,
-        inviteCode,
-        role: viewerRoleState,
-        handle: selfHandle
-      });
-      socket.emit("duel:join", {
-        roomId,
-        inviteCode,
-        role: viewerRoleState,
-        code: myCode
-      });
+      socket.emit("room:join", { roomId, inviteCode, role: viewerRoleState, handle: selfHandle });
+      socket.emit("duel:join", { roomId, inviteCode, role: viewerRoleState, code: myCode });
     });
 
-    socket.on("disconnect", () => {
-      setConnectionState("disconnected");
-    });
+    socket.on("disconnect", () => setConnectionState("disconnected"));
 
     socket.on("room:role-updated", (nextRole: "host" | "guest") => {
       setViewerRoleState(nextRole);
@@ -220,63 +218,63 @@ export function DuelLiveShell({
     });
 
     socket.on("code:state", (payload: { role: "host" | "guest"; code: string }) => {
-      if (payload.role === viewerRoleState) {
-        return;
-      }
-
+      if (payload.role === viewerRoleState) return;
       setOpponentCode(payload.code);
     });
 
-    socket.on("problem:ready", (incoming) => {
+    socket.on("problem:ready", (incoming: Problem) => {
       console.log("problem:ready payload:", JSON.stringify(incoming, null, 2));
       setProblem(incoming);
     });
 
+    socket.on("match:ended", (payload: { winnerRole: "host" | "guest" | "draw"; reason?: string }) => {
+      setMatchResult({
+        winnerRole: payload.winnerRole,
+        iWon: payload.winnerRole === viewerRoleState,
+        isDraw: payload.winnerRole === "draw",
+        reason: payload.reason as "timeout" | "ac" | undefined,
+      });
+    });
+
+    socket.on("emote:receive", (payload: { emote: string; fromRole: "host" | "guest" }) => {
+      addEmoteToast(payload.emote, payload.fromRole);
+    });
 
     return () => {
-      if (syncTimeoutRef.current) {
-        window.clearTimeout(syncTimeoutRef.current);
-      }
-
+      if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
       socketRef.current = null;
       socket.disconnect();
     };
-  }, [inviteCode, myCode, roomId, router, selfHandle, viewerRoleState]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteCode, roomId]);
 
-
+  // ── Countdown timer ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!problem) return; // don't start until problem is ready
-
+    if (!problem) return;
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
+          // Only host fires the event — server handles it once
+          if (viewerRoleState === "host") {
+            socketRef.current?.emit("timer:expired", { roomId });
+          }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(interval);
-  }, [problem]); // starts when problem arrives
+  }, [problem, roomId, viewerRoleState]);
 
-
-  const myHandle = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
-  const opponentHandle = viewerRoleState === "host" ? (guestName ?? "Opponent") : hostName;
-
-
+  // ── Submit ───────────────────────────────────────────────────────────────────
   async function handleSubmit() {
     setSubmitting(true);
     try {
       const res = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          matchId: roomId,
-          role: viewerRoleState,
-          language: editorLanguage,
-          code: myCode,
-        }),
+        body: JSON.stringify({ matchId: roomId, role: viewerRoleState, language: editorLanguage, code: myCode }),
       });
       const data = await res.json();
       setVerdict(data);
@@ -287,8 +285,80 @@ export function DuelLiveShell({
     }
   }
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
+
   return (
-    <main className="pb-16">
+    <main className="relative pb-16">
+
+      {/* ── Win/Loss Overlay ── */}
+      {matchResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div
+            className={`flex flex-col items-center gap-6 rounded-3xl border px-12 py-10 text-center shadow-2xl ${
+              matchResult.isDraw
+                ? "border-white/20 bg-[#111111]"
+                : matchResult.iWon
+                ? "border-lime/40 bg-[#0a1a0a]"
+                : "border-red-500/30 bg-[#1a0a0a]"
+            }`}
+          >
+            <div className="text-7xl">
+              {matchResult.isDraw ? "🤝" : matchResult.iWon ? "🏆" : "💀"}
+            </div>
+            <h1
+              className={`text-4xl font-black tracking-tight ${
+                matchResult.isDraw
+                  ? "text-white/80"
+                  : matchResult.iWon
+                  ? "text-lime"
+                  : "text-red-400"
+              }`}
+            >
+              {matchResult.isDraw ? "Draw!" : matchResult.iWon ? "Victory!" : "Defeated"}
+            </h1>
+            <p className="text-sm text-white/50">
+              {matchResult.isDraw
+                ? matchResult.reason === "timeout"
+                  ? "Time's up — both players tied on score"
+                  : "Both players tied"
+                : matchResult.iWon
+                ? matchResult.reason === "timeout"
+                  ? `Time's up — you had the higher score!`
+                  : `You solved it first — gg ${opponentHandle}!`
+                : matchResult.reason === "timeout"
+                ? `Time's up — ${matchResult.winnerRole === "host" ? hostName : (guestName ?? "Opponent")} had the higher score`
+                : `${matchResult.winnerRole === "host" ? hostName : (guestName ?? "Opponent")} solved it first`}
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push("/match" as Route)}
+              className="mt-2 rounded-full border border-white/20 bg-white/10 px-8 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              Back to Lobby
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Emote toasts ── */}
+      <div className="pointer-events-none fixed bottom-8 right-6 z-40 flex flex-col items-end gap-2">
+        {emoteToasts.map((t) => (
+          <div
+            key={t.id}
+            className={`animate-bounce rounded-2xl border px-4 py-2 text-2xl shadow-lg transition ${
+              t.fromRole === viewerRoleState
+                ? "border-lime/30 bg-lime/10"
+                : "border-white/20 bg-white/10"
+            }`}
+          >
+            {t.emote}
+            <span className="ml-2 text-xs font-semibold text-white/50">
+              {t.fromRole === viewerRoleState ? "you" : opponentHandle}
+            </span>
+          </div>
+        ))}
+      </div>
+
       <section className="mx-auto mt-6 max-w-[1600px] px-4 lg:px-6">
 
         {/* ── Top bar ── */}
@@ -304,12 +374,28 @@ export function DuelLiveShell({
               {config.difficulty}
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-              connectionState === "connected"
-                ? "border-lime/30 bg-lime/10 text-lime"
-                : "border-gold/30 bg-gold/10 text-gold"
-            }`}>
+          <div className="flex items-center gap-2">
+            {/* Emote buttons */}
+            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-1">
+              {EMOTES.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => sendEmote(e)}
+                  className="rounded-full px-1.5 py-0.5 text-base transition hover:bg-white/10 active:scale-125"
+                  title="Send emote"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+            <span
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                connectionState === "connected"
+                  ? "border-lime/30 bg-lime/10 text-lime"
+                  : "border-gold/30 bg-gold/10 text-gold"
+              }`}
+            >
               {connectionState === "connected" ? "● live" : "● connecting"}
             </span>
             <button
@@ -332,7 +418,7 @@ export function DuelLiveShell({
                   <h2 className="mt-1.5 text-xl font-semibold text-white">{problem.title}</h2>
                   <p className="mt-2 text-sm leading-6 text-white/65">{problem.prompt}</p>
                   <ul className="mt-3 space-y-1">
-                    {problem.rawJson?.constraints && problem.rawJson.constraints.map((c:string, i: number) => (
+                    {problem.rawJson?.constraints?.map((c, i) => (
                       <li key={i} className="text-xs text-white/50">• {c}</li>
                     ))}
                   </ul>
@@ -340,7 +426,7 @@ export function DuelLiveShell({
               ) : (
                 <>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Problem</p>
-                  <p className="mt-2 text-sm text-white/40 animate-pulse">Generating problem...</p>
+                  <p className="mt-2 animate-pulse text-sm text-white/40">Generating problem...</p>
                 </>
               )}
             </div>
@@ -353,18 +439,21 @@ export function DuelLiveShell({
                 <span className="text-white/45">Guest</span>
                 <span className="ml-2 font-semibold text-white">{guestName ?? "—"}</span>
               </div>
-              <div className="rounded-2xl border border-gold/30 bg-gold/10 px-4 py-2 font-semibold text-gold">
+              <div className={`rounded-2xl border px-4 py-2 font-semibold ${
+                timeLeft <= 60
+                  ? "border-red-500/30 bg-red-500/10 text-red-400"
+                  : "border-gold/30 bg-gold/10 text-gold"
+              }`}>
                 {String(Math.floor(timeLeft / 60)).padStart(2, "0")}:{String(timeLeft % 60).padStart(2, "0")}
               </div>
             </div>
           </div>
 
-          {problem && problem.rawJson?.examples &&problem.rawJson.examples.map((ex: { input: string; output: string; explanation?: string }, i: number) => (
+          {problem?.rawJson?.examples?.map((ex, i) => (
             <div key={i} className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
               <p className="text-white/50">Example {i + 1}</p>
               <p className="mt-1 text-white">Input: <code>{ex.input}</code></p>
               <p className="text-white">Output: <code>{ex.output}</code></p>
-              {/* {ex.explanation && <p className="mt-1 text-white/50">{ex.explanation}</p>} */}
             </div>
           ))}
         </div>
@@ -400,24 +489,27 @@ export function DuelLiveShell({
                 }}
               />
             </div>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="rounded-full border border-lime/40 bg-lime/15 px-4 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime transition hover:bg-lime/25 disabled:opacity-50"
-            >
-              {submitting ? "Running..." : "Submit"}
-            </button>
-
-            {verdict && (
-              <div className={`mt-3 rounded-xl border px-4 py-3 text-sm font-semibold ${
-                verdict.verdict === "AC"
-                  ? "border-lime/30 bg-lime/10 text-lime"
-                  : "border-red-500/30 bg-red-500/10 text-red-400"
-              }`}>
-                {verdict.verdict === "AC" ? "✓ Accepted" : "✗ Wrong Answer"} — {verdict.passedTests}/{verdict.totalTests} tests passed
-              </div>
-            )}
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={submitting || !!matchResult}
+                className="rounded-full border border-lime/40 bg-lime/15 px-5 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime transition hover:bg-lime/25 disabled:opacity-50"
+              >
+                {submitting ? "Running..." : "Submit"}
+              </button>
+              {verdict && (
+                <div
+                  className={`rounded-xl border px-4 py-1.5 text-sm font-semibold ${
+                    verdict.verdict === "AC"
+                      ? "border-lime/30 bg-lime/10 text-lime"
+                      : "border-red-500/30 bg-red-500/10 text-red-400"
+                  }`}
+                >
+                  {verdict.verdict === "AC" ? "✓ Accepted" : "✗ Wrong Answer"} — {verdict.passedTests}/{verdict.totalTests} tests
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Opponent editor */}
@@ -451,9 +543,7 @@ export function DuelLiveShell({
           </div>
 
         </div>
-
       </section>
     </main>
   );
 }
-
