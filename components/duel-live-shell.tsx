@@ -24,11 +24,70 @@ type CodeStatePayload = {
 };
 
 const starterTemplates: Record<string, string> = {
-  javascript: `function solve(input) {\n  // Write your solution here\n  return input;\n}\n\nconsole.log(solve("CodeRoyale"));\n`,
-  python: `def solve(input_data: str):\n    # Write your solution here\n    return input_data\n\nprint(solve("CodeRoyale"))\n`,
-  cpp: `#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n  // Write your solution here\n  cout << "CodeRoyale" << endl;\n  return 0;\n}\n`,
-  go: `package main\n\nimport "fmt"\n\nfunc main() {\n  // Write your solution here\n  fmt.Println("CodeRoyale")\n}\n`,
-  rust: `fn main() {\n    // Write your solution here\n    println!("CodeRoyale");\n}\n`,
+  javascript: `process.stdin.resume();
+process.stdin.setEncoding('utf8');
+let input = '';
+process.stdin.on('data', d => input += d);
+process.stdin.on('end', () => {
+  const lines = input.trim().split('\\n');
+  // Write your solution here
+  // Example: const nums = lines[0].split(' ').map(Number);
+
+});
+`,
+
+  python: `import sys
+input_data = sys.stdin.read().strip()
+lines = input_data.split('\\n')
+# Write your solution here
+# Example: nums = list(map(int, lines[0].split()))
+
+`,
+
+  cpp: `#include <bits/stdc++.h>
+using namespace std;
+
+int main() {
+  ios_base::sync_with_stdio(false);
+  cin.tie(NULL);
+  
+  // Write your solution here
+  // Example: int n; cin >> n;
+  
+  return 0;
+}
+`,
+
+  go: `package main
+
+import (
+  "bufio"
+  "fmt"
+  "os"
+)
+
+func main() {
+  reader := bufio.NewReader(os.Stdin)
+  _ = reader
+  // Write your solution here
+  // Example: fmt.Fscan(reader, &n)
+  fmt.Println()
+}
+`,
+
+  rust: `use std::io::{self, Read};
+
+fn main() {
+  let mut input = String::new();
+  io::stdin().read_to_string(&mut input).unwrap();
+  let mut lines = input.lines();
+  // Write your solution here
+  // Example: let nums: Vec<i32> = lines.next().unwrap().split_whitespace()
+  //           .map(|x| x.parse().unwrap()).collect();
+
+}
+`,
+
   default: `// Write your solution here\n`
 };
 

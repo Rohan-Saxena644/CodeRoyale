@@ -19,6 +19,30 @@ const compilerMap: Record<string, string> = {
   rust: "rust-1.82.0",
 };
 
+async function callWandbox(compiler: string, code: string, stdin: string, retries = 2): Promise<{stdout: string, stderr: string}> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const response = await fetch(wandboxUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ compiler, code, stdin }),
+    });
+    const data = await response.json();
+    const stdout = data.program_output ?? "";
+    
+    // If we got output or it's the last attempt, return
+    if (stdout || attempt === retries) {
+      return {
+        stdout,
+        stderr: data.compiler_error ?? data.program_error ?? ""
+      };
+    }
+    
+    // Wait 1 second before retry
+    await new Promise(res => setTimeout(res, 1000));
+  }
+  return { stdout: "", stderr: "" };
+}
+
 export async function POST(request: Request){
     const payload = await request.json()
     const result = runSchema.safeParse(payload)
@@ -38,33 +62,21 @@ export async function POST(request: Request){
     
 
     try {
-
         const compiler = compilerMap[language] ?? "nodejs-18.12.1";
 
-        const response = await fetch(wandboxUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            compiler,
-            code,
-            stdin: stdin ?? "",
-        }),
-        });
-
-        const data = await response.json();
-        console.log("[run] wandbox raw response:", JSON.stringify(data, null, 2));
+        const { stdout, stderr } = await callWandbox(compiler, code, stdin ?? "");
 
         return NextResponse.json({
-        stdout: data.program_output ?? "",
-        stderr: data.compiler_error ?? data.program_error ?? "",
-        exitCode: data.status ?? 0,
+        stdout,
+        stderr,
+        exitCode: stderr ? 1 : 0,
         });
-        } catch (err) {
-            console.error("[run] piston error:", err);
-            return NextResponse.json(
-                { error: "Code execution failed", detail: String(err) },
-                { status: 500 }
-            );
-        }
+    } catch (err) {
+        console.error("[run] piston error:", err);
+        return NextResponse.json(
+            { error: "Code execution failed", detail: String(err) },
+            { status: 500 }
+        );
+    }
 
 }
