@@ -72,9 +72,10 @@ Return this exact JSON structure:
 
 Rules:
 - difficulty must be "${difficulty}"
+- Keep ALL test case args small enough that you can manually verify the expected output
+- NEVER generate test cases with large numbers you cannot verify by hand
 - args and expectedOutput must be actual JSON values, NOT strings
-- For example if param is number[], args should be [1,2,3] not "[1,2,3]"
-- Return ONLY the JSON object, nothing else`;
+- Return ONLY the JSON object, nothing else. Do NOT return markdown, do NOT return explanations, do NOT return any text outside the JSON. ONLY return the JSON object.`;
 }
 
 async function generateWithRetry(prompt: string, retries = 3): Promise<string> {
