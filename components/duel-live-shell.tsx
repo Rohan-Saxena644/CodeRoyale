@@ -191,22 +191,30 @@ export function DuelLiveShell({
     });
 
     socket.on("problem:ready", (incoming: Problem) => {
-      console.log("problem:ready payload:", JSON.stringify(incoming, null, 2));
       setProblem(incoming);
-      // Inject a function stub so the editor matches what the runner expects
       const sig = incoming.rawJson?.functionSignature;
       if (sig) {
         const params = sig.params.map((p: { name: string }) => p.name).join(", ");
         const lang = getEditorLanguage(config);
         let stub = "";
+
         if (lang === "javascript") {
           stub = `function ${sig.name}(${params}) {\n  // your solution here\n}\n`;
         } else if (lang === "python") {
           stub = `def ${sig.name}(${params}):\n    # your solution here\n    pass\n`;
+        } else if (lang === "go") {
+          stub = `package main\n\nfunc ${sig.name}(${params}) interface{} {\n\t// your solution here\n\treturn nil\n}\n`;
+        } else if (lang === "cpp") {
+          stub = `#include <bits/stdc++.h>\nusing namespace std;\n\nauto ${sig.name}(${params}) {\n    // your solution here\n}\n`;
+        } else if (lang === "rust") {
+          stub = `fn ${sig.name}(${params}) {\n    // your solution here\n}\n`;
         } else {
           stub = `function ${sig.name}(${params}) {\n  // your solution here\n}\n`;
         }
+
         setMyCode(stub);
+        // Emit to opponent so they see your starting code immediately
+        setTimeout(() => emitCode(stub), 150);
       }
     });
 
