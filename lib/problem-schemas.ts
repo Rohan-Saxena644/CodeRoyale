@@ -2,34 +2,33 @@ import { z } from "zod";
 
 export const competitiveProblemSchema = z.object({
   mode: z.literal("competitive"),
-  title: z.string().min(8),
-  statement: z.string().min(40),
+  title: z.string().min(3),
+  statement: z.string().min(20),
   difficulty: z.enum(["easy", "medium", "hard"]),
   constraints: z.array(z.string().min(2)).min(1),
-  examples: z
-    .array(
-      z.object({
-        input: z.string(),
-        output: z.string(),
-        explanation: z.string().optional()
-      })
-    )
-    .min(1),
-  testCases: z
-    .array(
-      z.object({
-        input: z.string(),
-        expectedOutput: z.string(),
-        isHidden: z.boolean().default(false)
-      })
-    )
-    .min(3),
+  functionSignature: z.object({
+    name: z.string(),
+    params: z.array(z.object({
+      name: z.string(),
+      type: z.enum(["number", "number[]", "string", "string[]", "boolean"])
+    })),
+    returnType: z.enum(["number", "number[]", "string", "string[]", "boolean"])
+  }),
+  examples: z.array(z.object({
+    args: z.array(z.unknown()),
+    output: z.unknown(),
+    explanation: z.string().optional()
+  })).min(1),
+  testCases: z.array(z.object({
+    args: z.array(z.unknown()),
+    expectedOutput: z.unknown(),
+    isHidden: z.boolean().default(false)
+  })).min(3),
   referenceSolution: z.object({
     language: z.enum(["python", "javascript", "cpp", "go", "rust"]),
-    code: z.string().min(12),
-    approach: z.string().min(20)
+    code: z.string(),
+    approach: z.string()
   }).optional(),
-  hints: z.array(z.string()).optional(),
   sourceKind: z.enum(["generated", "permissive"])
 });
 

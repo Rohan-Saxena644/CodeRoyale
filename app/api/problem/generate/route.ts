@@ -30,35 +30,50 @@ const problemSchema = z.object({
 
 
 function buildPrompt(difficulty: string, track: string): string {
-  return `Generate a coding problem as JSON. Be concise.
+  return `Generate a competitive programming problem as JSON.
+
+The problem must use FUNCTION MODE — the user writes a function, not stdin/stdout code.
+
+Return this exact JSON structure:
 
 {
   "mode": "competitive",
   "title": "short title",
-  "statement": "One sentence problem description. Input format. Output format.",
+  "statement": "Describe the problem in 2-3 sentences. State what the function receives and what it should return.",
   "difficulty": "${difficulty}",
   "constraints": ["constraint 1", "constraint 2"],
+  "functionSignature": {
+    "name": "functionName",
+    "params": [
+      { "name": "paramName", "type": "number|number[]|string|string[]|boolean" }
+    ],
+    "returnType": "number|number[]|string|string[]|boolean"
+  },
   "examples": [
-    { "input": "example input", "output": "example output", "explanation": "brief" }
+    {
+      "args": [actualValue1, actualValue2],
+      "output": actualOutputValue,
+      "explanation": "brief explanation"
+    }
   ],
   "testCases": [
-    { "input": "test1", "expectedOutput": "out1", "isHidden": false },
-    { "input": "test2", "expectedOutput": "out2", "isHidden": false },
-    { "input": "test3", "expectedOutput": "out3", "isHidden": true },
-    { "input": "test4", "expectedOutput": "out4", "isHidden": true }
+    { "args": [actualValue1, actualValue2], "expectedOutput": actualValue, "isHidden": false },
+    { "args": [actualValue1, actualValue2], "expectedOutput": actualValue, "isHidden": false },
+    { "args": [actualValue1, actualValue2], "expectedOutput": actualValue, "isHidden": true },
+    { "args": [actualValue1, actualValue2], "expectedOutput": actualValue, "isHidden": true }
   ],
-  "sourceKind": "generated",
   "referenceSolution": {
     "language": "${track}",
-    "code": "solution code here",
+    "code": "function solution here",
     "approach": "one sentence"
-  }
+  },
+  "sourceKind": "generated"
 }
 
 Rules:
 - difficulty must be "${difficulty}"
-- statement must be under 2 sentences
-- Keep all strings short
+- args and expectedOutput must be actual JSON values, NOT strings
+- For example if param is number[], args should be [1,2,3] not "[1,2,3]"
 - Return ONLY the JSON object, nothing else`;
 }
 
