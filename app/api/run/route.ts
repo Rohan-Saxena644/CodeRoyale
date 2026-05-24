@@ -26,46 +26,46 @@ function buildDriver(
   const argsJson = JSON.stringify(args);
 
   if (language === "javascript") {
-    return `
-${userCode}
+      return `
+  ${userCode}
 
-const args = ${argsJson};
-const result = ${functionName}(...args);
-console.log(JSON.stringify(result));
-`;
+  const args = ${argsJson};
+  const result = ${functionName}(...args);
+  console.log(JSON.stringify(result));
+  `;
+    }
+
+    if (language === "python") {
+      return `
+  import json
+
+  ${userCode}
+
+  args = json.loads('${argsJson.replace(/'/g, "\\'")}')
+  result = ${functionName}(*args)
+  print(json.dumps(result))
+  `;
+    }
+
+    if (language === "cpp") {
+      return `
+  #include <bits/stdc++.h>
+  #include <nlohmann/json.hpp>
+  using namespace std;
+  using json = nlohmann::json;
+
+  ${userCode}
+
+  int main() {
+    json args = json::parse(R"(${argsJson})");
+    // C++ driver is complex — use javascript or python for now
+    return 0;
   }
+  `;
+    }
 
-  if (language === "python") {
-    return `
-import json
-
-${userCode}
-
-args = json.loads('${argsJson.replace(/'/g, "\\'")}')
-result = ${functionName}(*args)
-print(json.dumps(result))
-`;
-  }
-
-  if (language === "cpp") {
-    return `
-#include <bits/stdc++.h>
-#include <nlohmann/json.hpp>
-using namespace std;
-using json = nlohmann::json;
-
-${userCode}
-
-int main() {
-  json args = json::parse(R"(${argsJson})");
-  // C++ driver is complex — use javascript or python for now
-  return 0;
-}
-`;
-  }
-
-  // fallback — just run the code as-is
-  return userCode;
+    // fallback — just run the code as-is
+    return userCode;
 }
 
 export async function POST(request: Request) {

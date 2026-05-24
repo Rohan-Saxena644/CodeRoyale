@@ -24,7 +24,12 @@ type Problem = {
   difficulty: string;
   rawJson: {
     constraints?: string[];
-    examples?: { input: string; output: string; explanation?: string }[];
+    functionSignature?: {
+      name: string;
+      params: { name: string; type: string }[];
+      returnType: string;
+    };
+    examples?: { args: unknown[]; output: unknown; explanation?: string }[];
   };
 };
 
@@ -52,55 +57,18 @@ type EmoteToast = {
 const EMOTES = ["👏", "💀", "🔥", "😤", "🤝"];
 
 const starterTemplates: Record<string, string> = {
-  javascript: `process.stdin.resume();
-process.stdin.setEncoding('utf8');
-let input = '';
-process.stdin.on('data', d => input += d);
-process.stdin.on('end', () => {
-  const lines = input.trim().split('\\n');
-  // Write your solution here
-});
+  javascript: `// Waiting for problem...
 `,
-  python: `import sys
-input_data = sys.stdin.read().strip()
-lines = input_data.split('\\n')
-# Write your solution here
+  python: `# Waiting for problem...
 `,
-  cpp: `#include <bits/stdc++.h>
-using namespace std;
-
-int main() {
-  ios_base::sync_with_stdio(false);
-  cin.tie(NULL);
-  // Write your solution here
-  return 0;
-}
+  cpp: `// Waiting for problem...
 `,
-  go: `package main
-
-import (
-  "bufio"
-  "fmt"
-  "os"
-)
-
-func main() {
-  reader := bufio.NewReader(os.Stdin)
-  _ = reader
-  // Write your solution here
-  fmt.Println()
-}
+  go: `// Waiting for problem...
 `,
-  rust: `use std::io::{self, Read};
-
-fn main() {
-  let mut input = String::new();
-  io::stdin().read_to_string(&mut input).unwrap();
-  let mut lines = input.lines();
-  // Write your solution here
-}
+  rust: `// Waiting for problem...
 `,
-  default: `// Write your solution here\n`,
+  default: `// Waiting for problem...
+`,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -225,6 +193,21 @@ export function DuelLiveShell({
     socket.on("problem:ready", (incoming: Problem) => {
       console.log("problem:ready payload:", JSON.stringify(incoming, null, 2));
       setProblem(incoming);
+      // Inject a function stub so the editor matches what the runner expects
+      const sig = incoming.rawJson?.functionSignature;
+      if (sig) {
+        const params = sig.params.map((p: { name: string }) => p.name).join(", ");
+        const lang = getEditorLanguage(config);
+        let stub = "";
+        if (lang === "javascript") {
+          stub = `function ${sig.name}(${params}) {\n  // your solution here\n}\n`;
+        } else if (lang === "python") {
+          stub = `def ${sig.name}(${params}):\n    # your solution here\n    pass\n`;
+        } else {
+          stub = `function ${sig.name}(${params}) {\n  // your solution here\n}\n`;
+        }
+        setMyCode(stub);
+      }
     });
 
     socket.on("match:ended", (payload: { winnerRole: "host" | "guest" | "draw"; reason?: string }) => {
@@ -452,8 +435,8 @@ export function DuelLiveShell({
           {problem?.rawJson?.examples?.map((ex, i) => (
             <div key={i} className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
               <p className="text-white/50">Example {i + 1}</p>
-              <p className="mt-1 text-white">Input: <code>{ex.input}</code></p>
-              <p className="text-white">Output: <code>{ex.output}</code></p>
+              <p className="mt-1 text-white">Input: <code>{JSON.stringify(ex.args)}</code></p>
+              <p className="text-white">Output: <code>{JSON.stringify(ex.output)}</code></p>
             </div>
           ))}
         </div>

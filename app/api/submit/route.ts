@@ -32,7 +32,8 @@ export async function POST(request: Request) {
 
     // 2. Get test cases from rawJson
     const rawJson = problem.rawJson as {
-      testCases: { input: string; expectedOutput: string; isHidden: boolean }[];
+      functionSignature: { name: string };
+      testCases: { args: unknown[]; expectedOutput: unknown; isHidden: boolean }[];
     };
     const testCases = rawJson.testCases ?? [];
 
@@ -43,13 +44,18 @@ export async function POST(request: Request) {
         const res = await fetch(`${appUrl}/api/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ language, code, stdin: tc.input }),
+          body: JSON.stringify({
+            language,
+            code,
+            functionName: rawJson.functionSignature.name,
+            args: tc.args,
+          }),
         });
         const data = await res.json();
-        const actual = (data.stdout || data.output || "").trim();
-        const expected = tc.expectedOutput.trim();
+        const actual = (data.stdout ?? "").trim();
+        const expected = JSON.stringify(tc.expectedOutput);
         return {
-          input: tc.input,
+          input: JSON.stringify(tc.args),
           expected,
           actual,
           passed: actual === expected,
