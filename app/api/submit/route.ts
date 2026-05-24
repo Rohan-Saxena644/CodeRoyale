@@ -46,7 +46,7 @@ export async function POST(request: Request) {
           body: JSON.stringify({ language, code, stdin: tc.input }),
         });
         const data = await res.json();
-        const actual = (data.stdout ?? "").trim();
+        const actual = (data.stdout || data.output || "").trim();
         const expected = tc.expectedOutput.trim();
         return {
           input: tc.input,
