@@ -23,22 +23,22 @@ export async function POST(request: Request) {
   const { matchId, role, language, code } = result.data;
 
   try {
-    // 1. Fetch the problem for this match
     const problem = await prisma.problem.findUnique({ where: { matchId } });
-
     if (!problem) {
       return NextResponse.json({ error: "Problem not found" }, { status: 404 });
     }
 
-    // 2. Get test cases from rawJson
     const rawJson = problem.rawJson as {
-      functionSignature: { name: string };
+      functionSignature: {
+        name: string;
+        params: { name: string; type: string }[];
+      };
       testCases: { args: unknown[]; expectedOutput: unknown; isHidden: boolean }[];
     };
-    const testCases = rawJson.testCases ?? [];
 
-    // 3. Run code against each test case
+    const testCases = rawJson.testCases ?? [];
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
     const runResults = await Promise.all(
       testCases.map(async (tc) => {
         const res = await fetch(`${appUrl}/api/run`, {
@@ -49,6 +49,7 @@ export async function POST(request: Request) {
             code,
             functionName: rawJson.functionSignature.name,
             args: tc.args,
+            params: rawJson.functionSignature.params,
           }),
         });
         const data = await res.json();
@@ -64,13 +65,11 @@ export async function POST(request: Request) {
       })
     );
 
-    // 4. Compute verdict
     const totalTests = runResults.length;
     const passedTests = runResults.filter((r) => r.passed).length;
     const allPassed = passedTests === totalTests;
     const verdict = allPassed ? "AC" : "WA";
 
-    // 5. Save submission
     const submission = await prisma.submission.create({
       data: {
         matchId,
@@ -83,23 +82,19 @@ export async function POST(request: Request) {
       },
     });
 
-    // 6. On AC — check if this match already has a winner; if not, declare one
     if (allPassed) {
       const existingWinner = await prisma.match.findUnique({
         where: { id: matchId },
         select: { winnerRole: true },
       });
 
-      // Only declare winner if no one has won yet
       if (!existingWinner?.winnerRole) {
         await prisma.match.update({
           where: { id: matchId },
           data: { winnerRole: role, status: "finished" },
         });
 
-        // Notify socket server to broadcast match:ended to both players
-        const socketUrl =
-          process.env.SOCKET_SERVER_URL ?? "http://localhost:4000";
+        const socketUrl = process.env.SOCKET_SERVER_URL ?? "http://localhost:4000";
         try {
           await fetch(`${socketUrl}/internal/match-ended`, {
             method: "POST",
@@ -107,7 +102,6 @@ export async function POST(request: Request) {
             body: JSON.stringify({ roomId: matchId, winnerRole: role }),
           });
         } catch (err) {
-          // Non-fatal — client will still see AC verdict
           console.warn("[submit] could not notify socket server:", err);
         }
       }

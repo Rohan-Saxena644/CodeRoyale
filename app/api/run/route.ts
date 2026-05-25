@@ -6,6 +6,10 @@ const runSchema = z.object({
   code: z.string(),
   functionName: z.string(),
   args: z.array(z.unknown()),
+  params: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+  })).optional(),
 });
 
 const languageIds: Record<string, number> = {
@@ -17,55 +21,163 @@ const languageIds: Record<string, number> = {
   rust: 73,
 };
 
+const goTypeMap: Record<string, string> = {
+  "number": "int",
+  "number[]": "[]int",
+  "string": "string",
+  "string[]": "[]string",
+  "boolean": "bool",
+};
+
+const cppTypeMap: Record<string, string> = {
+  "number": "int",
+  "number[]": "vector<int>",
+  "string": "string",
+  "string[]": "vector<string>",
+  "boolean": "bool",
+};
+
+function toCppLiteral(value: unknown, type: string): string {
+  if (type === "number[]" && Array.isArray(value)) {
+    return `{${(value as number[]).join(", ")}}`;
+  }
+  if (type === "string[]" && Array.isArray(value)) {
+    return `{${(value as string[]).map(s => `"${s}"`).join(", ")}}`;
+  }
+  if (type === "string") return `"${value}"`;
+  if (type === "boolean") return value ? "true" : "false";
+  return String(value);
+}
+
+function stripGoBoilerplate(code: string): string {
+  return code
+    .replace(/^package\s+main\s*\r?\n?/m, "")
+    .replace(/^import\s*\([\s\S]*?\)\s*\r?\n?/m, "")
+    .replace(/^import\s+"[^"]*"\s*\r?\n?/gm, "")
+    .trim();
+}
+
 function buildDriver(
   language: string,
   userCode: string,
   functionName: string,
-  args: unknown[]
-): string {
+  args: unknown[],
+  params?: { name: string; type: string }[]
+): { code: string; stdin: string } {
   const argsJson = JSON.stringify(args);
 
   if (language === "javascript") {
-      return `
-  ${userCode}
-
-  const args = ${argsJson};
-  const result = ${functionName}(...args);
-  console.log(JSON.stringify(result));
-  `;
-    }
-
-    if (language === "python") {
-      return `
-  import json
-
-  ${userCode}
-
-  args = json.loads('${argsJson.replace(/'/g, "\\'")}')
-  result = ${functionName}(*args)
-  print(json.dumps(result))
-  `;
-    }
-
-    if (language === "cpp") {
-      return `
-  #include <bits/stdc++.h>
-  #include <nlohmann/json.hpp>
-  using namespace std;
-  using json = nlohmann::json;
-
-  ${userCode}
-
-  int main() {
-    json args = json::parse(R"(${argsJson})");
-    // C++ driver is complex — use javascript or python for now
-    return 0;
+    return {
+      code: `${userCode}\nconst __args = ${argsJson};\nconsole.log(JSON.stringify(${functionName}(...__args)));`,
+      stdin: "",
+    };
   }
-  `;
-    }
 
-    // fallback — just run the code as-is
-    return userCode;
+  if (language === "python") {
+    const safeArgs = argsJson.replace(/\\/g, "\\\\").replace(/"""/g, '\\"\\"\\"');
+    return {
+      code: `import json\n\n${userCode}\n\n__args = json.loads("""${safeArgs}""")\nprint(json.dumps(${functionName}(*__args)))`,
+      stdin: "",
+    };
+  }
+
+  if (language === "go") {
+    const stripped = stripGoBoilerplate(userCode);
+    const unmarshalLines = (params ?? [])
+      .map((p, i) => {
+        const goType = goTypeMap[p.type] ?? "interface{}";
+        return `\tvar _p${i} ${goType}\n\tjson.Unmarshal(_rawArgs[${i}], &_p${i})`;
+      })
+      .join("\n");
+    const callArgs = (params ?? []).map((_, i) => `_p${i}`).join(", ");
+
+    const code = [
+      "package main",
+      "",
+      'import (',
+      '\t"encoding/json"',
+      '\t"fmt"',
+      '\t"io"',
+      '\t"os"',
+      ")",
+      "",
+      stripped,
+      "",
+      "func main() {",
+      "\t_input, _ := io.ReadAll(os.Stdin)",
+      "\tvar _rawArgs []json.RawMessage",
+      "\tjson.Unmarshal(_input, &_rawArgs)",
+      unmarshalLines,
+      `\t_result := ${functionName}(${callArgs})`,
+      "\t_out, _ := json.Marshal(_result)",
+      "\tfmt.Println(string(_out))",
+      "}",
+    ].join("\n");
+
+    return { code, stdin: argsJson };
+  }
+
+  if (language === "cpp") {
+    const argDecls = (params ?? [])
+      .map((p, i) => {
+        const cppType = cppTypeMap[p.type] ?? "auto";
+        const literal = toCppLiteral(args[i], p.type);
+        return `    ${cppType} _p${i} = ${cppType === "int" || cppType === "bool" ? literal : `${cppType}${literal}`};`;
+      })
+      .join("\n");
+    const callArgs = (params ?? []).map((_, i) => `_p${i}`).join(", ");
+
+    // Determine print strategy based on return type
+    const retType = params && params.length > 0 ? "auto" : "auto";
+    const printLine = `auto _r = ${functionName}(${callArgs});\n    cout << _r << endl;`;
+
+    const code = [
+      "#include <bits/stdc++.h>",
+      "using namespace std;",
+      "",
+      userCode,
+      "",
+      "int main() {",
+      argDecls,
+      `    ${printLine}`,
+      "    return 0;",
+      "}",
+    ].join("\n");
+
+    return { code, stdin: "" };
+  }
+
+  if (language === "java") {
+    // Java: wrap user's static method in a Main class
+    const argDecls = (params ?? [])
+      .map((p, i) => {
+        if (p.type === "number[]") return `        int[] _p${i} = new int[]{${(args[i] as number[]).join(",")}};`;
+        if (p.type === "number") return `        int _p${i} = ${args[i]};`;
+        if (p.type === "string") return `        String _p${i} = "${args[i]}";`;
+        return `        Object _p${i} = ${JSON.stringify(args[i])};`;
+      })
+      .join("\n");
+    const callArgs = (params ?? []).map((_, i) => `_p${i}`).join(", ");
+
+    const code = [
+      "import java.util.*;",
+      "import java.util.stream.*;",
+      "",
+      "public class Main {",
+      "    " + userCode.replace(/\n/g, "\n    "),
+      "",
+      "    public static void main(String[] args) {",
+      argDecls,
+      `        System.out.println(${functionName}(${callArgs}));`,
+      "    }",
+      "}",
+    ].join("\n");
+
+    return { code, stdin: "" };
+  }
+
+  // fallback
+  return { code: userCode, stdin: "" };
 }
 
 export async function POST(request: Request) {
@@ -79,7 +191,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { language, code, functionName, args } = result.data;
+  const { language, code, functionName, args, params } = result.data;
   const languageId = languageIds[language];
 
   if (!languageId) {
@@ -89,7 +201,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const fullCode = buildDriver(language, code, functionName, args);
+  const { code: fullCode, stdin } = buildDriver(language, code, functionName, args, params);
 
   try {
     const res = await fetch("https://ce.judge0.com/submissions?wait=true", {
@@ -98,12 +210,12 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         source_code: fullCode,
         language_id: languageId,
-        stdin: "",
+        stdin,
       }),
     });
 
     const data = await res.json();
-    console.log("[run] judge0:", JSON.stringify(data));
+    console.log("[run] judge0:", JSON.stringify(data).slice(0, 300));
 
     return NextResponse.json({
       stdout: data.stdout ?? "",
