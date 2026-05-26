@@ -148,32 +148,25 @@ function buildDriver(
   }
 
   if (language === "java") {
-    // Java: wrap user's static method in a Main class
-    const argDecls = (params ?? [])
-      .map((p, i) => {
-        if (p.type === "number[]") return `        int[] _p${i} = new int[]{${(args[i] as number[]).join(",")}};`;
-        if (p.type === "number") return `        int _p${i} = ${args[i]};`;
-        if (p.type === "string") return `        String _p${i} = "${args[i]}";`;
-        return `        Object _p${i} = ${JSON.stringify(args[i])};`;
-      })
-      .join("\n");
+    const argDecls = (params ?? []).map((p, i) => {
+      if (p.type === "number[]") return `        int[] _p${i} = new int[]{${(args[i] as number[]).join(",")}};`;
+      if (p.type === "number") return `        int _p${i} = ${args[i]};`;
+      if (p.type === "string") return `        String _p${i} = "${args[i]}";`;
+      if (p.type === "string[]") return `        String[] _p${i} = new String[]{${(args[i] as string[]).map(s => `"${s}"`).join(",")}};`;
+      return `        Object _p${i} = null;`;
+    }).join("\n");
     const callArgs = (params ?? []).map((_, i) => `_p${i}`).join(", ");
 
-    const code = [
-      "import java.util.*;",
-      "import java.util.stream.*;",
-      "",
-      "public class Main {",
-      "    " + userCode.replace(/\n/g, "\n    "),
-      "",
-      "    public static void main(String[] args) {",
-      argDecls,
-      `        System.out.println(${functionName}(${callArgs}));`,
-      "    }",
-      "}",
-    ].join("\n");
+    // Strip outer class if user already wrapped in public class Main
+    const strippedJava = userCode
+      .replace(/public\s+class\s+Main\s*\{/, "")
+      .replace(/^\s*\}\s*$/m, "")
+      .trim();
 
-    return { code, stdin: "" };
+    return {
+      code: `public class Main {\n${strippedJava}\n\n    public static void main(String[] args) {\n${argDecls}\n        System.out.println(${functionName}(${callArgs}));\n    }\n}`,
+      stdin: "",
+    };
   }
 
   // fallback
