@@ -152,21 +152,48 @@ function buildDriver(
       if (p.type === "number[]") return `        int[] _p${i} = new int[]{${(args[i] as number[]).join(",")}};`;
       if (p.type === "number") return `        int _p${i} = ${args[i]};`;
       if (p.type === "string") return `        String _p${i} = "${args[i]}";`;
-      if (p.type === "string[]") return `        String[] _p${i} = new String[]{${(args[i] as string[]).map(s => `"${s}"`).join(",")}};`;
+      if (p.type === "string[]") return `        String[] _p${i} = new String[]{${(args[i] as string[]).map((s: string) => `"${s}"`).join(",")}};`;
+      if (p.type === "boolean") return `        boolean _p${i} = ${args[i]};`;
       return `        Object _p${i} = null;`;
     }).join("\n");
+
     const callArgs = (params ?? []).map((_, i) => `_p${i}`).join(", ");
 
-    // Strip outer class if user already wrapped in public class Main
-    const strippedJava = userCode
-      .replace(/public\s+class\s+Main\s*\{/, "")
-      .replace(/^\s*\}\s*$/m, "")
+    // Strip user's outer class — we provide our own
+    const inner = userCode
+      .replace(/^[\s\S]*?public\s+class\s+Main\s*\{/, "")
+      .replace(/\}\s*$/, "")
       .trim();
 
-    return {
-      code: `public class Main {\n${strippedJava}\n\n    public static void main(String[] args) {\n${argDecls}\n        System.out.println(${functionName}(${callArgs}));\n    }\n}`,
-      stdin: "",
-    };
+   return {
+    code: `import java.util.*;
+    public class Main {
+    ${inner}
+
+        public static void main(String[] args) {
+    ${argDecls}
+            Object _r = ${functionName}(${callArgs});
+            System.out.println(toJson(_r));
+        }
+
+        static String toJson(Object o) {
+            if (o instanceof int[]) {
+                int[] a = (int[]) o;
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < a.length; i++) { if (i > 0) sb.append(","); sb.append(a[i]); }
+                return sb.append("]").toString();
+            }
+            if (o instanceof String[]) {
+                String[] a = (String[]) o;
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < a.length; i++) { if (i > 0) sb.append(","); sb.append("\\"").append(a[i]).append("\\""); }
+                return sb.append("]").toString();
+            }
+            return String.valueOf(o);
+        }
+    }`,
+    stdin: "",
+  };
   }
 
   // fallback
