@@ -7,7 +7,8 @@ export type DuelLanguage =
   | "javascript"
   | "cpp"
   | "go"
-  | "rust";
+  | "rust"
+  | "java";
 
 export type DevCategory =
   | "react-ui"

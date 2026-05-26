@@ -57,18 +57,13 @@ type EmoteToast = {
 const EMOTES = ["👏", "💀", "🔥", "😤", "🤝"];
 
 const starterTemplates: Record<string, string> = {
-  javascript: `// Waiting for problem...
-`,
-  python: `# Waiting for problem...
-`,
-  cpp: `// Waiting for problem...
-`,
-  go: `// Waiting for problem...
-`,
-  rust: `// Waiting for problem...
-`,
-  default: `// Waiting for problem...
-`,
+  javascript: `// Waiting for problem...\n`,
+  python: `# Waiting for problem...\n`,
+  cpp: `// Waiting for problem...\n`,
+  go: `// Waiting for problem...\n`,
+  rust: `// Waiting for problem...\n`,
+  java: `// Waiting for problem...\n`,
+  default: `// Waiting for problem...\n`,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -208,7 +203,12 @@ export function DuelLiveShell({
           stub = `#include <bits/stdc++.h>\nusing namespace std;\n\nauto ${sig.name}(${params}) {\n    // your solution here\n}\n`;
         } else if (lang === "rust") {
           stub = `fn ${sig.name}(${params}) {\n    // your solution here\n}\n`;
-        } else {
+        }else if(lang === "java") {
+           stub = `public class Main {\n    public static ${sig.returnType === "number[]" ? "int[]" : sig.returnType === "number" ? "int" : "String"} ${sig.name}(${sig.params.map((p: { name: string; type: string }) => {
+            const javaType = p.type === "number[]" ? "int[]" : p.type === "number" ? "int" : p.type === "string[]" ? "String[]" : p.type === "string" ? "String" : "boolean";
+            return `${javaType} ${p.name}`;
+          }).join(", ")}) {\n        // your solution here\n    }\n}`;
+        }else {
           stub = `function ${sig.name}(${params}) {\n  // your solution here\n}\n`;
         }
 

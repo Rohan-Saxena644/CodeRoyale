@@ -7,7 +7,7 @@ const matchSchema = z.object({
   config: z.object({
     mode: z.enum(["competitive", "dev"]),
     difficulty: z.enum(["easy", "medium", "hard"]),
-    duelLanguage: z.enum(["python", "javascript", "cpp", "go", "rust"]).optional(),
+    duelLanguage: z.enum(["python", "javascript", "cpp", "go", "rust","java"]).optional(),
     devCategory: z.enum(["react-ui", "express-api", "go-backend", "rust-backend", "next-actions"]).optional()
   })
 });

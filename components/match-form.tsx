@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { DevCategory, DuelLanguage, MatchConfig, ModeKind } from "@/lib/types";
 
-const duelLanguages: DuelLanguage[] = ["python", "javascript", "cpp", "go", "rust"];
+const duelLanguages: DuelLanguage[] = ["python", "javascript", "cpp", "go", "rust","java"];
 const devCategories: DevCategory[] = ["react-ui", "express-api", "go-backend", "rust-backend", "next-actions"];
 
 export function MatchForm() {
