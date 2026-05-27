@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getStoredMatchByInviteCode, updateStoredMatchGuest } from "@/lib/match-repository";
+export const dynamic = "force-dynamic";
 
 const joinSchema = z.object({
   inviteCode: z.string().trim().min(4).max(12),

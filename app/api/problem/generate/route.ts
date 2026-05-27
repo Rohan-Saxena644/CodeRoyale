@@ -1,5 +1,5 @@
      
-
+export const dynamic = "force-dynamic";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 
 const runSchema = z.object({
   language: z.string(),
