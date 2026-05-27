@@ -1,29 +1,20 @@
 import { neonConfig, Pool } from "@neondatabase/serverless";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "@prisma/client";
-import ws from "ws";
 
-if (typeof WebSocket === "undefined") {
-  neonConfig.webSocketConstructor = ws;
-}
+// Use HTTP fetch instead of WebSockets — works in Vercel serverless + avoids ws build issues
+neonConfig.poolQueryViaFetch = true;
 
-const globalForPrisma = global as unknown as { 
-  prisma: PrismaClient;
-  pool: Pool;
-};
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
-function createClient() {
-  const pool = new Pool({ 
-    connectionString: process.env.DATABASE_URL,
-    connectionTimeoutMillis: 10000,
-    idleTimeoutMillis: 0, // disable idle timeout — keep connection alive
-  });
+function createClient(): PrismaClient {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const adapter = new PrismaNeon(pool);
   return new PrismaClient({ adapter });
 }
 
-if (!globalForPrisma.prisma) {
-  globalForPrisma.prisma = createClient();
-}
+export const prisma = globalForPrisma.prisma ?? createClient();
 
-export const prisma = globalForPrisma.prisma;
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
