@@ -8,6 +8,18 @@ import type { RoomPresenceState } from "../lib/types";
 const app = express();
 app.use(express.json());
 
+app.use((req, res, next) => {
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+});
+
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
