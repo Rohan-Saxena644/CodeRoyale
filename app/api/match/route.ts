@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createMatchRecord } from "@/lib/match-repository";
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const matchSchema = z.object({
   hostName: z.string().trim().min(2).max(32),

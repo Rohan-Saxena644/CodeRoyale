@@ -4,6 +4,7 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { problemSeeds } from "@/lib/problem-seeds";
+export const runtime = "nodejs";
 
 const requestSchema = z.object({
   matchId: z.string().min(1),
