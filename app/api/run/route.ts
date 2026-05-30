@@ -224,7 +224,7 @@ function buildDriver(
     const inner = hasClassWrapper
       ? userCode
           .replace(/^[\s\S]*?public\s+class\s+Main\s*\{/, "")
-          .slice(0, userCode.lastIndexOf("}") - 1)  // remove only the outer class brace
+          .replace(/\}\s*$/, "")   // remove outer class closing brace
           .trim()
       : userCode.trim();
 
