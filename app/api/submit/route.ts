@@ -11,6 +11,11 @@ const submitSchema = z.object({
   code: z.string(),
 });
 
+// Small delay helper — gives Judge0 CE breathing room between requests
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function POST(request: Request) {
   const payload = await request.json();
   const result = submitSchema.safeParse(payload);
@@ -34,6 +39,7 @@ export async function POST(request: Request) {
       functionSignature: {
         name: string;
         params: { name: string; type: string }[];
+        returnType?: string;
       };
       testCases: { args: unknown[]; expectedOutput: unknown; isHidden: boolean }[];
     };
@@ -41,8 +47,29 @@ export async function POST(request: Request) {
     const testCases = rawJson.testCases ?? [];
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
-    const runResults = await Promise.all(
-      testCases.map(async (tc) => {
+    // ── Run test cases SEQUENTIALLY ──────────────────────────────────────────
+    // Judge0 CE (free public instance) rate-limits concurrent requests.
+    // Promise.all caused all 4 to fire at once → some got throttled → null stdout
+    // → "WA" even for correct code. Sequential with a small gap fixes this.
+    const runResults: {
+      input: string;
+      expected: string;
+      actual: string;
+      passed: boolean;
+      isHidden: boolean;
+      error?: string;
+    }[] = [];
+
+    for (let i = 0; i < testCases.length; i++) {
+      const tc = testCases[i];
+
+      // Small gap between requests to stay within Judge0 CE rate limits
+      if (i > 0) await sleep(300);
+
+      let actual = "";
+      let runError: string | undefined;
+
+      try {
         const res = await fetch(`${appUrl}/api/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -52,20 +79,39 @@ export async function POST(request: Request) {
             functionName: rawJson.functionSignature.name,
             args: tc.args,
             params: rawJson.functionSignature.params,
+            returnType: rawJson.functionSignature.returnType,
           }),
         });
-        const data = await res.json();
-        const actual = (data.stdout ?? "").trim();
-        const expected = JSON.stringify(tc.expectedOutput);
-        return {
-          input: JSON.stringify(tc.args),
-          expected,
-          actual,
-          passed: actual === expected,
-          isHidden: tc.isHidden,
-        };
-      })
-    );
+
+        if (!res.ok) {
+          runError = `Run API returned ${res.status}`;
+        } else {
+          const data = await res.json();
+          if (data.error) {
+            runError = data.error;
+          } else if (!data.stdout && data.stderr) {
+            // Compile error or runtime error — stderr has the message
+            runError = data.stderr.slice(0, 200);
+          } else {
+            actual = (data.stdout ?? "").trim();
+          }
+        }
+      } catch (err) {
+        runError = `Network error: ${String(err)}`;
+      }
+
+      const expected = JSON.stringify(tc.expectedOutput);
+      const passed = !runError && actual === expected;
+
+      runResults.push({
+        input: JSON.stringify(tc.args),
+        expected,
+        actual,
+        passed,
+        isHidden: tc.isHidden,
+        ...(runError ? { error: runError } : {}),
+      });
+    }
 
     const totalTests = runResults.length;
     const passedTests = runResults.filter((r) => r.passed).length;
@@ -96,7 +142,11 @@ export async function POST(request: Request) {
           data: { winnerRole: role, status: "finished" },
         });
 
-        const socketUrl = process.env.SOCKET_SERVER_URL ?? "http://localhost:4000";
+        const socketUrl =
+          process.env.SOCKET_SERVER_URL ??
+          process.env.NEXT_PUBLIC_SOCKET_URL ??
+          "http://localhost:4000";
+
         try {
           await fetch(`${socketUrl}/internal/match-ended`, {
             method: "POST",
