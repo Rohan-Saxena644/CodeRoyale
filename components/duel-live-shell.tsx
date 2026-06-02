@@ -18,6 +18,8 @@ type DuelLiveShellProps = {
   config: MatchConfig;
 };
 
+type FunctionParam = { name: string; type: string };
+
 type Problem = {
   title: string;
   prompt: string;
@@ -26,7 +28,7 @@ type Problem = {
     constraints?: string[];
     functionSignature?: {
       name: string;
-      params: { name: string; type: string }[];
+      params: FunctionParam[];
       returnType: string;
     };
     examples?: { args: unknown[]; output: unknown; explanation?: string }[];
@@ -58,24 +60,83 @@ const EMOTES = ["👏", "💀", "🔥", "😤", "🤝"];
 
 const starterTemplates: Record<string, string> = {
   javascript: `// Waiting for problem...\n`,
-  python: `# Waiting for problem...\n`,
-  cpp: `// Waiting for problem...\n`,
-  go: `// Waiting for problem...\n`,
-  rust: `// Waiting for problem...\n`,
-  java: `// Waiting for problem...\n`,
-  default: `// Waiting for problem...\n`,
+  python:     `# Waiting for problem...\n`,
+  cpp:        `// Waiting for problem...\n`,
+  go:         `// Waiting for problem...\n`,
+  rust:       `// Waiting for problem...\n`,
+  java:       `// Waiting for problem...\n`,
+  default:    `// Waiting for problem...\n`,
 };
+
+// ─── Type maps ───────────────────────────────────────────────────────────────
+
+const GO_TYPES: Record<string, string> = {
+  "number": "int", "number[]": "[]int",
+  "string": "string", "string[]": "[]string", "boolean": "bool",
+};
+
+const CPP_TYPES: Record<string, string> = {
+  "number": "int", "number[]": "vector<int>",
+  "string": "string", "string[]": "vector<string>", "boolean": "bool",
+};
+
+const JAVA_TYPES: Record<string, string> = {
+  "number": "int", "number[]": "int[]",
+  "string": "String", "string[]": "String[]", "boolean": "boolean",
+};
+
+const JAVA_ZERO: Record<string, string> = {
+  "number": "0", "boolean": "false", "string": '""',
+  "number[]": "null", "string[]": "null",
+};
+
+// ─── Stub builder (pure function — no closures, no template nesting) ─────────
+
+function buildStub(
+  lang: string,
+  name: string,
+  params: FunctionParam[],
+  returnType: string
+): string {
+  const simpleParams = params.map((p) => p.name).join(", ");
+
+  if (lang === "javascript") {
+    return "function " + name + "(" + simpleParams + ") {\n  // your solution here\n}\n";
+  }
+  if (lang === "python") {
+    return "def " + name + "(" + simpleParams + "):\n    # your solution here\n    pass\n";
+  }
+  if (lang === "go") {
+    const typedParams = params.map((p) => p.name + " " + (GO_TYPES[p.type] ?? "interface{}")).join(", ");
+    const ret  = GO_TYPES[returnType] ?? "interface{}";
+    const zero = ret === "int" ? "0" : ret === "bool" ? "false" : ret === "string" ? '""' : "nil";
+    return "package main\n\nfunc " + name + "(" + typedParams + ") " + ret + " {\n\t// your solution here\n\treturn " + zero + "\n}\n";
+  }
+  if (lang === "cpp") {
+    const typedParams = params.map((p) => (CPP_TYPES[p.type] ?? "int") + " " + p.name).join(", ");
+    const ret = CPP_TYPES[returnType] ?? "int";
+    return "#include <bits/stdc++.h>\nusing namespace std;\n\n" + ret + " " + name + "(" + typedParams + ") {\n    // your solution here\n}\n";
+  }
+  if (lang === "java") {
+    const typedParams = params.map((p) => (JAVA_TYPES[p.type] ?? "Object") + " " + p.name).join(", ");
+    const ret  = JAVA_TYPES[returnType] ?? "Object";
+    const zero = JAVA_ZERO[returnType]  ?? "null";
+    return "public static " + ret + " " + name + "(" + typedParams + ") {\n    // your solution here\n    return " + zero + ";\n}\n";
+  }
+  if (lang === "rust") {
+    return "fn " + name + "(" + simpleParams + ") {\n    // your solution here\n}\n";
+  }
+  return "function " + name + "(" + simpleParams + ") {\n  // your solution here\n}\n";
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getSocketUrl() {
+function getSocketUrl(): string {
   return process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
 }
 
-function getEditorLanguage(config: MatchConfig) {
-  if (config.mode === "competitive") {
-    return config.duelLanguage ?? "javascript";
-  }
+function getEditorLanguage(config: MatchConfig): string {
+  if (config.mode === "competitive") return config.duelLanguage ?? "javascript";
   return "javascript";
 }
 
@@ -89,66 +150,51 @@ export function DuelLiveShell({
   viewerRole,
   config,
 }: DuelLiveShellProps) {
-  const router = useRouter();
-  const socketRef = useRef<Socket | null>(null);
-  const syncTimeoutRef = useRef<number | null>(null);
+  const router          = useRouter();
+  const socketRef       = useRef<Socket | null>(null);
+  const syncTimeoutRef  = useRef<number | null>(null);
   const emoteCounterRef = useRef(0);
 
   const editorLanguage = getEditorLanguage(config);
-  const starterCode = starterTemplates[editorLanguage] ?? starterTemplates.default;
+  const starterCode    = starterTemplates[editorLanguage] ?? starterTemplates.default;
 
   const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "disconnected">("connecting");
-  const [myCode, setMyCode] = useState(starterCode);
-  const [opponentCode, setOpponentCode] = useState(starterCode);
+  const [myCode,          setMyCode]          = useState<string>(starterCode);
+  const [opponentCode,    setOpponentCode]    = useState<string>(starterCode);
   const [viewerRoleState, setViewerRoleState] = useState<"host" | "guest">(viewerRole);
-  const [problem, setProblem] = useState<Problem | null>(null);
-  const [verdict, setVerdict] = useState<Verdict | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(30 * 60);
-  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
-  const [emoteToasts, setEmoteToasts] = useState<EmoteToast[]>([]);
+  const [problem,         setProblem]         = useState<Problem | null>(null);
+  const [verdict,         setVerdict]         = useState<Verdict | null>(null);
+  const [submitting,      setSubmitting]      = useState(false);
+  const [timeLeft,        setTimeLeft]        = useState(30 * 60);
+  const [matchResult,     setMatchResult]     = useState<MatchResult | null>(null);
+  const [emoteToasts,     setEmoteToasts]     = useState<EmoteToast[]>([]);
 
-  const selfHandle = useMemo(
-    () => (viewerRole === "host" ? hostName : guestName ?? "Guest"),
-    [guestName, hostName, viewerRole]
-  );
-  const myHandle = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
+  const selfHandle     = useMemo(() => viewerRole === "host" ? hostName : guestName ?? "Guest", [guestName, hostName, viewerRole]);
+  const myHandle       = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
   const opponentHandle = viewerRoleState === "host" ? (guestName ?? "Opponent") : hostName;
 
-  // ── Emote helper ────────────────────────────────────────────────────────────
+  // ── Emotes ───────────────────────────────────────────────────────────────────
   const addEmoteToast = useCallback((emote: string, fromRole: "host" | "guest") => {
     const id = ++emoteCounterRef.current;
     setEmoteToasts((prev) => [...prev, { id, emote, fromRole }]);
-    setTimeout(() => {
-      setEmoteToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 2500);
+    setTimeout(() => setEmoteToasts((prev) => prev.filter((t) => t.id !== id)), 2500);
   }, []);
 
   function sendEmote(emote: string) {
-    socketRef.current?.emit("emote:send", {
-      roomId,
-      emote,
-      fromRole: viewerRoleState,
-    });
-    // Also show it for yourself (smaller / different side)
+    socketRef.current?.emit("emote:send", { roomId, emote, fromRole: viewerRoleState });
     addEmoteToast(emote, viewerRoleState);
   }
 
-  // ── Code helpers ─────────────────────────────────────────────────────────────
+  // ── Code sync ────────────────────────────────────────────────────────────────
   function emitCode(code: string) {
-    socketRef.current?.emit("code:sync", {
-      roomId,
-      inviteCode,
-      role: viewerRoleState,
-      code,
-    });
+    socketRef.current?.emit("code:sync", { roomId, inviteCode, role: viewerRoleState, code });
   }
 
   function handleCodeChange(nextValue: string | undefined) {
-    const nextCode = nextValue ?? "";
-    setMyCode(nextCode);
+    const next = nextValue ?? "";
+    setMyCode(next);
     if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
-    syncTimeoutRef.current = window.setTimeout(() => emitCode(nextCode), 90);
+    syncTimeoutRef.current = window.setTimeout(() => emitCode(next), 90);
   }
 
   function handleLeaveDuel() {
@@ -176,7 +222,7 @@ export function DuelLiveShell({
 
     socket.on("room:state", (nextPresence: { status: string }) => {
       if (nextPresence.status !== "active") {
-        router.push(`/room/${roomId}?invite=${inviteCode}&role=${viewerRoleState}` as Route);
+        router.push(("/room/" + roomId + "?invite=" + inviteCode + "&role=" + viewerRoleState) as Route);
       }
     });
 
@@ -188,40 +234,17 @@ export function DuelLiveShell({
     socket.on("problem:ready", (incoming: Problem) => {
       setProblem(incoming);
       const sig = incoming.rawJson?.functionSignature;
-      if (sig) {
-        const params = sig.params.map((p: { name: string }) => p.name).join(", ");
-        const lang = getEditorLanguage(config);
-        let stub = "";
-
-        if (lang === "javascript") {
-          stub = `function ${sig.name}(${params}) {\n  // your solution here\n}\n`;
-        } else if (lang === "python") {
-          stub = `def ${sig.name}(${params}):\n    # your solution here\n    pass\n`;
-        } else if (lang === "go") {
-          stub = `package main\n\nfunc ${sig.name}(${params}) interface{} {\n\t// your solution here\n\treturn nil\n}\n`;
-        } else if (lang === "cpp") {
-          stub = `#include <bits/stdc++.h>\nusing namespace std;\n\nauto ${sig.name}(${params}) {\n    // your solution here\n}\n`;
-        } else if (lang === "rust") {
-          stub = `fn ${sig.name}(${params}) {\n    // your solution here\n}\n`;
-        }else if(lang === "java") {
-           stub = `public class Main {\n    public static ${sig.returnType === "number[]" ? "int[]" : sig.returnType === "number" ? "int" : "String"} ${sig.name}(${sig.params.map((p: { name: string; type: string }) => {
-            const javaType = p.type === "number[]" ? "int[]" : p.type === "number" ? "int" : p.type === "string[]" ? "String[]" : p.type === "string" ? "String" : "boolean";
-            return `${javaType} ${p.name}`;
-          }).join(", ")}) {\n        // your solution here\n    }\n}`;
-        }else {
-          stub = `function ${sig.name}(${params}) {\n  // your solution here\n}\n`;
-        }
-
-        setMyCode(stub);
-        // Emit to opponent so they see your starting code immediately
-        setTimeout(() => emitCode(stub), 150);
-      }
+      if (!sig) return;
+      const stub = buildStub(editorLanguage, sig.name, sig.params, sig.returnType);
+      setMyCode(stub);
+      setOpponentCode(stub);
+      setTimeout(() => emitCode(stub), 150);
     });
 
     socket.on("match:ended", (payload: { winnerRole: "host" | "guest" | "draw"; reason?: string }) => {
       setMatchResult({
         winnerRole: payload.winnerRole,
-        iWon: payload.winnerRole === viewerRoleState,
+        iWon:   payload.winnerRole === viewerRoleState,
         isDraw: payload.winnerRole === "draw",
         reason: payload.reason as "timeout" | "ac" | undefined,
       });
@@ -236,20 +259,17 @@ export function DuelLiveShell({
       socketRef.current = null;
       socket.disconnect();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inviteCode, roomId]);
 
-  // ── Countdown timer ──────────────────────────────────────────────────────────
+  // ── Countdown timer ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!problem) return;
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          // Only host fires the event — server handles it once
-          if (viewerRoleState === "host") {
-            socketRef.current?.emit("timer:expired", { roomId });
-          }
+          if (viewerRoleState === "host") socketRef.current?.emit("timer:expired", { roomId });
           return 0;
         }
         return prev - 1;
@@ -258,7 +278,7 @@ export function DuelLiveShell({
     return () => clearInterval(interval);
   }, [problem, roomId, viewerRoleState]);
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────────────────────────────
   async function handleSubmit() {
     setSubmitting(true);
     try {
@@ -267,7 +287,7 @@ export function DuelLiveShell({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ matchId: roomId, role: viewerRoleState, language: editorLanguage, code: myCode }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as Verdict;
       setVerdict(data);
     } catch (err) {
       console.error("[submit]", err);
@@ -276,49 +296,36 @@ export function DuelLiveShell({
     }
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
-
+  // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <main className="relative pb-16">
 
       {/* ── Win/Loss Overlay ── */}
       {matchResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div
-            className={`flex flex-col items-center gap-6 rounded-3xl border px-12 py-10 text-center shadow-2xl ${
-              matchResult.isDraw
-                ? "border-white/20 bg-[#111111]"
-                : matchResult.iWon
-                ? "border-lime/40 bg-[#0a1a0a]"
-                : "border-red-500/30 bg-[#1a0a0a]"
-            }`}
-          >
+          <div className={[
+            "flex flex-col items-center gap-6 rounded-3xl border px-12 py-10 text-center shadow-2xl",
+            matchResult.isDraw  ? "border-white/20 bg-[#111111]" :
+            matchResult.iWon    ? "border-lime/40 bg-[#0a1a0a]"  :
+                                  "border-red-500/30 bg-[#1a0a0a]",
+          ].join(" ")}>
             <div className="text-7xl">
               {matchResult.isDraw ? "🤝" : matchResult.iWon ? "🏆" : "💀"}
             </div>
-            <h1
-              className={`text-4xl font-black tracking-tight ${
-                matchResult.isDraw
-                  ? "text-white/80"
-                  : matchResult.iWon
-                  ? "text-lime"
-                  : "text-red-400"
-              }`}
-            >
+            <h1 className={[
+              "text-4xl font-black tracking-tight",
+              matchResult.isDraw ? "text-white/80" : matchResult.iWon ? "text-lime" : "text-red-400",
+            ].join(" ")}>
               {matchResult.isDraw ? "Draw!" : matchResult.iWon ? "Victory!" : "Defeated"}
             </h1>
             <p className="text-sm text-white/50">
               {matchResult.isDraw
-                ? matchResult.reason === "timeout"
-                  ? "Time's up — both players tied on score"
-                  : "Both players tied"
+                ? (matchResult.reason === "timeout" ? "Time's up — both players tied on score" : "Both players tied")
                 : matchResult.iWon
-                ? matchResult.reason === "timeout"
-                  ? `Time's up — you had the higher score!`
-                  : `You solved it first — gg ${opponentHandle}!`
-                : matchResult.reason === "timeout"
-                ? `Time's up — ${matchResult.winnerRole === "host" ? hostName : (guestName ?? "Opponent")} had the higher score`
-                : `${matchResult.winnerRole === "host" ? hostName : (guestName ?? "Opponent")} solved it first`}
+                ? (matchResult.reason === "timeout" ? "Time's up — you had the higher score!" : "You solved it first — gg " + opponentHandle + "!")
+                : (matchResult.reason === "timeout"
+                    ? "Time's up — " + (matchResult.winnerRole === "host" ? hostName : guestName ?? "Opponent") + " had the higher score"
+                    : (matchResult.winnerRole === "host" ? hostName : guestName ?? "Opponent") + " solved it first")}
             </p>
             <button
               type="button"
@@ -336,11 +343,10 @@ export function DuelLiveShell({
         {emoteToasts.map((t) => (
           <div
             key={t.id}
-            className={`animate-bounce rounded-2xl border px-4 py-2 text-2xl shadow-lg transition ${
-              t.fromRole === viewerRoleState
-                ? "border-lime/30 bg-lime/10"
-                : "border-white/20 bg-white/10"
-            }`}
+            className={[
+              "animate-bounce rounded-2xl border px-4 py-2 text-2xl shadow-lg transition",
+              t.fromRole === viewerRoleState ? "border-lime/30 bg-lime/10" : "border-white/20 bg-white/10",
+            ].join(" ")}
           >
             {t.emote}
             <span className="ml-2 text-xs font-semibold text-white/50">
@@ -355,45 +361,27 @@ export function DuelLiveShell({
         {/* ── Top bar ── */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-              {config.mode}
-            </span>
-            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-              {config.duelLanguage ?? config.devCategory}
-            </span>
-            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold capitalize text-white/60">
-              {config.difficulty}
-            </span>
+            {[config.mode, config.duelLanguage ?? config.devCategory, config.difficulty].map((label) => (
+              <span key={label} className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold capitalize text-white/60">
+                {label}
+              </span>
+            ))}
           </div>
           <div className="flex items-center gap-2">
-            {/* Emote buttons */}
             <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-1">
               {EMOTES.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => sendEmote(e)}
-                  className="rounded-full px-1.5 py-0.5 text-base transition hover:bg-white/10 active:scale-125"
-                  title="Send emote"
-                >
-                  {e}
-                </button>
+                <button key={e} type="button" onClick={() => sendEmote(e)}
+                  className="rounded-full px-1.5 py-0.5 text-base transition hover:bg-white/10 active:scale-125">{e}</button>
               ))}
             </div>
-            <span
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                connectionState === "connected"
-                  ? "border-lime/30 bg-lime/10 text-lime"
-                  : "border-gold/30 bg-gold/10 text-gold"
-              }`}
-            >
+            <span className={[
+              "rounded-full border px-3 py-1.5 text-xs font-semibold",
+              connectionState === "connected" ? "border-lime/30 bg-lime/10 text-lime" : "border-gold/30 bg-gold/10 text-gold",
+            ].join(" ")}>
               {connectionState === "connected" ? "● live" : "● connecting"}
             </span>
-            <button
-              type="button"
-              onClick={handleLeaveDuel}
-              className="rounded-full border border-white/15 px-4 py-1.5 text-sm font-semibold text-white/70 transition hover:border-coral/50 hover:text-white"
-            >
+            <button type="button" onClick={handleLeaveDuel}
+              className="rounded-full border border-white/15 px-4 py-1.5 text-sm font-semibold text-white/70 transition hover:border-coral/50 hover:text-white">
               Leave
             </button>
           </div>
@@ -430,16 +418,14 @@ export function DuelLiveShell({
                 <span className="text-white/45">Guest</span>
                 <span className="ml-2 font-semibold text-white">{guestName ?? "—"}</span>
               </div>
-              <div className={`rounded-2xl border px-4 py-2 font-semibold ${
-                timeLeft <= 60
-                  ? "border-red-500/30 bg-red-500/10 text-red-400"
-                  : "border-gold/30 bg-gold/10 text-gold"
-              }`}>
+              <div className={[
+                "rounded-2xl border px-4 py-2 font-semibold",
+                timeLeft <= 60 ? "border-red-500/30 bg-red-500/10 text-red-400" : "border-gold/30 bg-gold/10 text-gold",
+              ].join(" ")}>
                 {String(Math.floor(timeLeft / 60)).padStart(2, "0")}:{String(timeLeft % 60).padStart(2, "0")}
               </div>
             </div>
           </div>
-
           {problem?.rawJson?.examples?.map((ex, i) => (
             <div key={i} className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
               <p className="text-white/50">Example {i + 1}</p>
@@ -459,44 +445,22 @@ export function DuelLiveShell({
                 <p className="text-sm font-semibold text-white">{myHandle}</p>
                 <p className="text-xs uppercase tracking-[0.16em] text-white/40">you · {editorLanguage}</p>
               </div>
-              <span className="rounded-full border border-lime/30 bg-lime/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime">
-                writable
-              </span>
+              <span className="rounded-full border border-lime/30 bg-lime/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime">writable</span>
             </div>
             <div className="overflow-hidden rounded-[14px] border border-white/10">
-              <Editor
-                height="520px"
-                language={editorLanguage}
-                theme="vs-dark"
-                value={myCode}
-                onChange={handleCodeChange}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  wordWrap: "on",
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  padding: { top: 12, bottom: 12 },
-                }}
-              />
+              <Editor height="520px" language={editorLanguage} theme="vs-dark" value={myCode} onChange={handleCodeChange}
+                options={{ minimap: { enabled: false }, fontSize: 14, wordWrap: "on", automaticLayout: true, scrollBeyondLastLine: false, padding: { top: 12, bottom: 12 } }} />
             </div>
             <div className="mt-3 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting || !!matchResult}
-                className="rounded-full border border-lime/40 bg-lime/15 px-5 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime transition hover:bg-lime/25 disabled:opacity-50"
-              >
+              <button type="button" onClick={handleSubmit} disabled={submitting || !!matchResult}
+                className="rounded-full border border-lime/40 bg-lime/15 px-5 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime transition hover:bg-lime/25 disabled:opacity-50">
                 {submitting ? "Running..." : "Submit"}
               </button>
               {verdict && (
-                <div
-                  className={`rounded-xl border px-4 py-1.5 text-sm font-semibold ${
-                    verdict.verdict === "AC"
-                      ? "border-lime/30 bg-lime/10 text-lime"
-                      : "border-red-500/30 bg-red-500/10 text-red-400"
-                  }`}
-                >
+                <div className={[
+                  "rounded-xl border px-4 py-1.5 text-sm font-semibold",
+                  verdict.verdict === "AC" ? "border-lime/30 bg-lime/10 text-lime" : "border-red-500/30 bg-red-500/10 text-red-400",
+                ].join(" ")}>
                   {verdict.verdict === "AC" ? "✓ Accepted" : "✗ Wrong Answer"} — {verdict.passedTests}/{verdict.totalTests} tests
                 </div>
               )}
@@ -510,26 +474,11 @@ export function DuelLiveShell({
                 <p className="text-sm font-semibold text-white/75">{opponentHandle}</p>
                 <p className="text-xs uppercase tracking-[0.16em] text-white/40">opponent · {editorLanguage}</p>
               </div>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-                read only
-              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-white/45">read only</span>
             </div>
             <div className="overflow-hidden rounded-[14px] border border-white/10">
-              <Editor
-                height="520px"
-                language={editorLanguage}
-                theme="vs-dark"
-                value={opponentCode}
-                options={{
-                  readOnly: true,
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  wordWrap: "on",
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  padding: { top: 12, bottom: 12 },
-                }}
-              />
+              <Editor height="520px" language={editorLanguage} theme="vs-dark" value={opponentCode}
+                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 14, wordWrap: "on", automaticLayout: true, scrollBeyondLastLine: false, padding: { top: 12, bottom: 12 } }} />
             </div>
           </div>
 
