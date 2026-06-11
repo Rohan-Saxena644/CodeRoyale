@@ -39,20 +39,45 @@ const cppTypeMap: Record<string, string> = {
   "boolean": "bool",
 };
 
-// ── C++ literal builder ──────────────────────────────────────────────────────
+const rustTypeMap: Record<string, string> = {
+  "number": "i64",
+  "number[]": "Vec<i64>",
+  "string": "String",
+  "string[]": "Vec<String>",
+  "boolean": "bool",
+};
+
+// ── Escape helpers ────────────────────────────────────────────────────────────
+
+/** Escape a string so it is safe inside a C-style double-quoted literal. */
+function escapeCString(s: string): string {
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
+}
+
+// ── C++ literal builder ───────────────────────────────────────────────────────
 function toCppLiteral(value: unknown, type: string): string {
   if (type === "number[]" && Array.isArray(value)) {
     return `{${(value as number[]).join(",")}}`;
   }
   if (type === "string[]" && Array.isArray(value)) {
-    return `{${(value as string[]).map((s) => `"${s}"`).join(",")}}`;
+    return `{${(value as string[]).map((s) => `"${escapeCString(s)}"`).join(",")}}`;
   }
-  if (type === "string") return `"${value}"`;
+  if (type === "string") return `"${escapeCString(String(value))}"`;
   if (type === "boolean") return value ? "true" : "false";
   return String(value);
 }
 
-// ── Go boilerplate stripper ──────────────────────────────────────────────────
+// ── Java literal builder ──────────────────────────────────────────────────────
+function toJavaStringLiteral(s: string): string {
+  return `"${escapeCString(s)}"`;
+}
+
+// ── Go boilerplate stripper ───────────────────────────────────────────────────
 function stripGoBoilerplate(code: string): string {
   return code
     .replace(/^package\s+main\s*\r?\n?/m, "")
@@ -61,7 +86,7 @@ function stripGoBoilerplate(code: string): string {
     .trim();
 }
 
-// ── Driver builders ──────────────────────────────────────────────────────────
+// ── Driver builders ───────────────────────────────────────────────────────────
 function buildDriver(
   language: string,
   userCode: string,
@@ -84,25 +109,23 @@ function buildDriver(
   }
 
   // ── Python ──────────────────────────────────────────────────────────────
-  // FIX: use separators=(',',':') so output matches JSON.stringify (no spaces)
+  // FIX: Pass args via stdin (not triple-quoted literal) so that string args
+  // containing double-quotes or other special characters are handled correctly.
   if (language === "python") {
-    const safeArgs = argsJson
-      .replace(/\\/g, "\\\\")
-      .replace(/"""/g, '\\"\\"\\"');
     return {
       code: [
-        "import json",
+        "import json, sys",
         "",
         userCode,
         "",
-        `__args = json.loads("""${safeArgs}""")`,
+        "__args = json.loads(sys.stdin.read())",
         `print(json.dumps(${functionName}(*__args), separators=(',', ':')))`,
       ].join("\n"),
-      stdin: "",
+      stdin: argsJson,
     };
   }
 
-  // ── Go ──────────────────────────────────────────────────────────────────
+  // ── Go ───────────────────────────────────────────────────────────────────
   if (language === "go") {
     const stripped = stripGoBoilerplate(userCode);
     const unmarshalLines = (params ?? [])
@@ -139,17 +162,12 @@ function buildDriver(
     return { code, stdin: argsJson };
   }
 
-  // ── C++ ─────────────────────────────────────────────────────────────────
-  // FIX 1: arg declarations use plain literals, not `TypeLiteral` syntax
-  // FIX 2: overloaded _p() helpers handle every return type correctly
+  // ── C++ ──────────────────────────────────────────────────────────────────
   if (language === "cpp") {
     const argDecls = (params ?? [])
       .map((p, i) => {
         const cppType = cppTypeMap[p.type] ?? "int";
         const lit = toCppLiteral(args[i], p.type);
-        // For vectors, brace-init works: vector<int> _p0 = {1,2,3};
-        // For string: string _p0 = "hello";
-        // For int/bool: int _p0 = 5;
         return `    ${cppType} _p${i} = ${lit};`;
       })
       .join("\n");
@@ -197,19 +215,16 @@ function buildDriver(
     return { code, stdin: "" };
   }
 
-  // ── Java ─────────────────────────────────────────────────────────────────
-  // FIX 1: don't strip closing } from method body when there's no class wrapper
-  // FIX 2: toJson handles String return type (adds quotes)
-  // FIX 3: consistent 4-space indentation throughout
+  // ── Java ──────────────────────────────────────────────────────────────────
   if (language === "java") {
     const argDecls = (params ?? [])
       .map((p, i) => {
         if (p.type === "number[]")
           return `        int[] _p${i} = new int[]{${(args[i] as number[]).join(",")}};`;
         if (p.type === "string[]")
-          return `        String[] _p${i} = new String[]{${(args[i] as string[]).map((s: string) => `"${s}"`).join(",")}};`;
+          return `        String[] _p${i} = new String[]{${(args[i] as string[]).map((s: string) => toJavaStringLiteral(s)).join(",")}};`;
         if (p.type === "string")
-          return `        String _p${i} = "${args[i]}";`;
+          return `        String _p${i} = ${toJavaStringLiteral(String(args[i]))};`;
         if (p.type === "boolean")
           return `        boolean _p${i} = ${args[i]};`;
         return `        int _p${i} = ${args[i]};`; // number default
@@ -218,13 +233,11 @@ function buildDriver(
 
     const callArgs = (params ?? []).map((_, i) => `_p${i}`).join(", ");
 
-    // If user wrapped their code in `public class Main { ... }`, strip the wrapper.
-    // If they wrote just the method (as our stub shows), embed it directly.
     const hasClassWrapper = /public\s+class\s+Main/.test(userCode);
     const inner = hasClassWrapper
       ? userCode
           .replace(/^[\s\S]*?public\s+class\s+Main\s*\{/, "")
-          .replace(/\}\s*$/, "")   // remove outer class closing brace
+          .replace(/\}\s*$/, "")
           .trim()
       : userCode.trim();
 
@@ -251,9 +264,9 @@ function buildDriver(
       "            for (int i = 0; i < a.length; i++) { if (i > 0) sb.append(\",\"); sb.append(\"\\\"\").append(a[i]).append(\"\\\"\"); }",
       "            return sb.append(\"]\").toString();",
       "        }",
-      "        if (o instanceof Boolean) return o.toString();",          // true / false
-      "        if (o instanceof String)  return \"\\\"\" + o + \"\\\"\";", // quoted string
-      "        return String.valueOf(o);",                                // int, long, etc.
+      "        if (o instanceof Boolean) return o.toString();",
+      "        if (o instanceof String)  return \"\\\"\" + o + \"\\\"\";",
+      "        return String.valueOf(o);",
       "    }",
       "",
       "    public static void main(String[] args) {",
@@ -267,11 +280,50 @@ function buildDriver(
     return { code, stdin: "" };
   }
 
+  // ── Rust ─────────────────────────────────────────────────────────────────
+  // FIX: Build a proper Rust driver with a main() that deserialises args from
+  // stdin (same approach as Go), calls the user's function, and prints the
+  // result as JSON via serde_json.
+  if (language === "rust") {
+    const paramTypes = (params ?? []).map((p) => rustTypeMap[p.type] ?? "i64");
+    const callArgs = (params ?? []).map((_, i) => `_p${i}`).join(", ");
+
+    // Deserialise each positional arg from the JSON array
+    const letBindings = (params ?? [])
+      .map((p, i) => {
+        const rt = rustTypeMap[p.type] ?? "i64";
+        return `    let _p${i}: ${rt} = serde_json::from_value(_raw[${i}].clone()).unwrap();`;
+      })
+      .join("\n");
+
+    // Strip any existing fn main the user may have included in their stub
+    const stripped = userCode
+      .replace(/fn\s+main\s*\(\s*\)\s*\{[\s\S]*?\n\}/m, "")
+      .trim();
+
+    const code = [
+      "use std::io::{self, Read};",
+      "",
+      stripped,
+      "",
+      "fn main() {",
+      "    let mut input = String::new();",
+      "    io::stdin().read_to_string(&mut input).unwrap();",
+      "    let _raw: Vec<serde_json::Value> = serde_json::from_str(&input).unwrap();",
+      letBindings,
+      `    let _result = ${functionName}(${callArgs});`,
+      "    println!(\"{}\", serde_json::to_string(&_result).unwrap());",
+      "}",
+    ].join("\n");
+
+    return { code, stdin: argsJson };
+  }
+
   // fallback — unsupported language, return code as-is
   return { code: userCode, stdin: "" };
 }
 
-// ── POST handler ─────────────────────────────────────────────────────────────
+// ── POST handler ──────────────────────────────────────────────────────────────
 export async function POST(request: Request) {
   const payload = await request.json();
   const result = runSchema.safeParse(payload);
