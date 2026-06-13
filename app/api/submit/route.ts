@@ -16,6 +16,70 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type RunPayload = {
+  language: string;
+  code: string;
+  functionName: string;
+  args: unknown[];
+  params: { name: string; type: string }[];
+  returnType?: string;
+};
+
+type RunOutcome = {
+  actual: string;
+  runError?: string;
+  isJudgeError?: boolean;
+};
+
+// Extra attempts (with backoff) if /api/run itself reports a judge/infra
+// failure (Judge0 unreachable, rate-limited, etc.) — as opposed to a
+// compile error or thrown exception in the user's own code, which is a
+// real result and should NOT be retried.
+const RUN_RETRY_DELAYS_MS = [800, 1600];
+
+async function runOneTest(appUrl: string, payload: RunPayload): Promise<RunOutcome> {
+  for (let attempt = 0; attempt <= RUN_RETRY_DELAYS_MS.length; attempt++) {
+    if (attempt > 0) await sleep(RUN_RETRY_DELAYS_MS[attempt - 1]);
+    const isLastAttempt = attempt === RUN_RETRY_DELAYS_MS.length;
+
+    try {
+      const res = await fetch(`${appUrl}/api/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        // /api/run returns 502 when Judge0 is unreachable/rate-limited even
+        // after its own internal retries — that's an infra issue, retry here.
+        if (!isLastAttempt) continue;
+        return { actual: "", runError: `Run API returned ${res.status}`, isJudgeError: true };
+      }
+
+      const data = await res.json();
+
+      if (data.error) {
+        if (!isLastAttempt) continue;
+        return { actual: "", runError: data.error, isJudgeError: true };
+      }
+
+      if (!data.stdout && data.stderr) {
+        // Compile error or thrown exception in the USER's code — a real
+        // result, not a judge issue, so don't retry.
+        return { actual: "", runError: String(data.stderr).slice(0, 200) };
+      }
+
+      return { actual: (data.stdout ?? "").trim() };
+    } catch (err) {
+      if (!isLastAttempt) continue;
+      return { actual: "", runError: `Network error: ${String(err)}`, isJudgeError: true };
+    }
+  }
+
+  // Unreachable, but keeps TypeScript happy.
+  return { actual: "", runError: "Run failed after retries", isJudgeError: true };
+}
+
 export async function POST(request: Request) {
   const payload = await request.json();
   const result = submitSchema.safeParse(payload);
@@ -50,7 +114,8 @@ export async function POST(request: Request) {
     // ── Run test cases SEQUENTIALLY ──────────────────────────────────────────
     // Judge0 CE (free public instance) rate-limits concurrent requests.
     // Promise.all caused all 4 to fire at once → some got throttled → null stdout
-    // → "WA" even for correct code. Sequential with a small gap fixes this.
+    // → "WA" even for correct code. Sequential with a gap, plus retries inside
+    // runOneTest for judge/infra failures, fixes this.
     const runResults: {
       input: string;
       expected: string;
@@ -58,47 +123,23 @@ export async function POST(request: Request) {
       passed: boolean;
       isHidden: boolean;
       error?: string;
+      isJudgeError?: boolean;
     }[] = [];
 
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
 
-      // Small gap between requests to stay within Judge0 CE rate limits
-      if (i > 0) await sleep(300);
+      // Gap between requests to stay within Judge0 CE rate limits
+      if (i > 0) await sleep(600);
 
-      let actual = "";
-      let runError: string | undefined;
-
-      try {
-        const res = await fetch(`${appUrl}/api/run`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            language,
-            code,
-            functionName: rawJson.functionSignature.name,
-            args: tc.args,
-            params: rawJson.functionSignature.params,
-            returnType: rawJson.functionSignature.returnType,
-          }),
-        });
-
-        if (!res.ok) {
-          runError = `Run API returned ${res.status}`;
-        } else {
-          const data = await res.json();
-          if (data.error) {
-            runError = data.error;
-          } else if (!data.stdout && data.stderr) {
-            // Compile error or runtime error — stderr has the message
-            runError = data.stderr.slice(0, 200);
-          } else {
-            actual = (data.stdout ?? "").trim();
-          }
-        }
-      } catch (err) {
-        runError = `Network error: ${String(err)}`;
-      }
+      const { actual, runError, isJudgeError } = await runOneTest(appUrl, {
+        language,
+        code,
+        functionName: rawJson.functionSignature.name,
+        args: tc.args,
+        params: rawJson.functionSignature.params,
+        returnType: rawJson.functionSignature.returnType,
+      });
 
       const expected = JSON.stringify(tc.expectedOutput);
       const passed = !runError && actual === expected;
@@ -110,6 +151,7 @@ export async function POST(request: Request) {
         passed,
         isHidden: tc.isHidden,
         ...(runError ? { error: runError } : {}),
+        ...(isJudgeError ? { isJudgeError: true } : {}),
       });
     }
 
@@ -117,6 +159,11 @@ export async function POST(request: Request) {
     const passedTests = runResults.filter((r) => r.passed).length;
     const allPassed = passedTests === totalTests;
     const verdict = allPassed ? "AC" : "WA";
+    // True if ANY test (including hidden ones) failed because the judge
+    // itself had trouble — not because the code produced a wrong answer.
+    // Surfaced to the client so a 0/N result doesn't look like "your code
+    // is wrong" when it's actually "the grading service is having issues".
+    const hasJudgeErrors = runResults.some((r) => r.isJudgeError);
 
     const submission = await prisma.submission.create({
       data: {
@@ -163,6 +210,7 @@ export async function POST(request: Request) {
       verdict,
       passedTests,
       totalTests,
+      hasJudgeErrors,
       submission,
       results: runResults.filter((r) => !r.isHidden),
     });

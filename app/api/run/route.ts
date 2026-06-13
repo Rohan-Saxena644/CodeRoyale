@@ -183,7 +183,18 @@ function buildDriver(
       "static inline void _p(long long v)          { cout << v; }",
       "static inline void _p(double v)             { cout << v; }",
       "static inline void _p(bool v)               { cout << (v?\"true\":\"false\"); }",
-      "static inline void _p(const string& v)      { cout << '\"' << v << '\"'; }",
+      "static inline void _pesc(const string& v) {",
+      "    cout << '\"';",
+      "    for (char c : v) {",
+      "        if (c == '\\\\' || c == '\"') cout << '\\\\' << c;",
+      "        else if (c == '\\n') cout << \"\\\\n\";",
+      "        else if (c == '\\r') cout << \"\\\\r\";",
+      "        else if (c == '\\t') cout << \"\\\\t\";",
+      "        else cout << c;",
+      "    }",
+      "    cout << '\"';",
+      "}",
+      "static inline void _p(const string& v)      { _pesc(v); }",
       "static inline void _p(const vector<int>& v) {",
       "    cout << \"[\";",
       "    for(int i=0;i<(int)v.size();i++){if(i)cout<<\",\";cout<<v[i];}",
@@ -191,7 +202,7 @@ function buildDriver(
       "}",
       "static inline void _p(const vector<string>& v) {",
       "    cout << \"[\";",
-      "    for(int i=0;i<(int)v.size();i++){if(i)cout<<\",\";cout<<'\"'<<v[i]<<'\"';}",
+      "    for(int i=0;i<(int)v.size();i++){if(i)cout<<\",\";_pesc(v[i]);}",
       "    cout << \"]\";",
       "}",
       "static inline void _p(const vector<bool>& v) {",
@@ -251,6 +262,30 @@ function buildDriver(
       "    " + inner.split("\n").join("\n    "),
       "",
       "    // ── JSON-compatible serializer ──────────────────────────────────",
+      "    static final String _Q = String.valueOf((char) 34);",
+      "",
+      "    // Escapes a Java string the same way JSON.stringify would, so that",
+      "    // string return values compare equal to the expected JSON output",
+      "    // even when they contain quotes, backslashes, or newlines.",
+      "    static String _jsonEscape(String s) {",
+      "        StringBuilder sb = new StringBuilder();",
+      "        for (int i = 0; i < s.length(); i++) {",
+      "            char c = s.charAt(i);",
+      "            if (c == 92) { sb.append((char) 92).append((char) 92); }",
+      "            else if (c == 34) { sb.append((char) 92).append((char) 34); }",
+      "            else if (c == 10) { sb.append((char) 92).append('n'); }",
+      "            else if (c == 13) { sb.append((char) 92).append('r'); }",
+      "            else if (c == 9)  { sb.append((char) 92).append('t'); }",
+      "            else if (c < 32) {",
+      "                String hex = Integer.toHexString(c);",
+      "                while (hex.length() < 4) hex = '0' + hex;",
+      "                sb.append((char) 92).append('u').append(hex);",
+      "            }",
+      "            else sb.append(c);",
+      "        }",
+      "        return sb.toString();",
+      "    }",
+      "",
       "    static String _toJson(Object o) {",
       "        if (o instanceof int[]) {",
       "            int[] a = (int[]) o;",
@@ -261,11 +296,11 @@ function buildDriver(
       "        if (o instanceof String[]) {",
       "            String[] a = (String[]) o;",
       "            StringBuilder sb = new StringBuilder(\"[\");",
-      "            for (int i = 0; i < a.length; i++) { if (i > 0) sb.append(\",\"); sb.append(\"\\\"\").append(a[i]).append(\"\\\"\"); }",
+      "            for (int i = 0; i < a.length; i++) { if (i > 0) sb.append(\",\"); sb.append(_Q).append(_jsonEscape(a[i])).append(_Q); }",
       "            return sb.append(\"]\").toString();",
       "        }",
       "        if (o instanceof Boolean) return o.toString();",
-      "        if (o instanceof String)  return \"\\\"\" + o + \"\\\"\";",
+      "        if (o instanceof String)  return _Q + _jsonEscape((String) o) + _Q;",
       "        return String.valueOf(o);",
       "    }",
       "",
@@ -323,6 +358,109 @@ function buildDriver(
   return { code: userCode, stdin: "" };
 }
 
+// ── Judge0 execution helper ─────────────────────────────────────────────────
+//
+// The free ce.judge0.com instance is heavily rate-limited and, under load,
+// can either:
+//   - respond with HTTP 429 ("Too Many Requests"), or
+//   - return a submission that is still "In Queue" / "Processing" even
+//     though we passed `wait=true`.
+//
+// Previously, either case produced a response with empty `stdout` and no
+// `stderr`, which /api/submit silently treated as "Wrong Answer" — even for
+// completely correct code (this is why correct submissions could come back
+// as 0/N passed with no visible error). This helper retries on 429s /
+// network errors and polls the submission by token until it reaches a
+// terminal status, so the caller gets either a real result or an explicit
+// error it can surface.
+
+type Judge0Result = {
+  token?: string;
+  stdout?: string | null;
+  stderr?: string | null;
+  compile_output?: string | null;
+  message?: string | null;
+  status?: { id: number; description: string };
+};
+
+const JUDGE0_BASE_URL = "https://ce.judge0.com";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Judge0 status ids 1 ("In Queue") and 2 ("Processing") are non-terminal.
+function isPending(data: Judge0Result | null | undefined): boolean {
+  return !!data?.status && (data.status.id === 1 || data.status.id === 2);
+}
+
+async function runOnJudge0(
+  sourceCode: string,
+  languageId: number,
+  stdin: string
+): Promise<{ data?: Judge0Result; error?: string }> {
+  const maxAttempts = 4;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const isLastAttempt = attempt === maxAttempts - 1;
+    if (attempt > 0) await sleep(1000 * attempt);
+
+    let res: Response;
+    try {
+      res = await fetch(`${JUDGE0_BASE_URL}/submissions?base64_encoded=false&wait=true`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_code: sourceCode, language_id: languageId, stdin }),
+      });
+    } catch (err) {
+      if (isLastAttempt) return { error: `Network error contacting Judge0: ${String(err)}` };
+      continue;
+    }
+
+    if (res.status === 429) {
+      if (isLastAttempt) return { error: "Judge0 rate limit (429) — please try again in a moment" };
+      continue;
+    }
+
+    if (!res.ok) {
+      if (isLastAttempt) return { error: `Judge0 returned HTTP ${res.status}` };
+      continue;
+    }
+
+    let data: Judge0Result;
+    try {
+      data = await res.json();
+    } catch (err) {
+      if (isLastAttempt) return { error: `Judge0 returned an unreadable response: ${String(err)}` };
+      continue;
+    }
+
+    // Poll by token while the submission is still queued/processing.
+    let pollAttempts = 0;
+    while (isPending(data) && data.token && pollAttempts < 5) {
+      await sleep(500 + pollAttempts * 500);
+      try {
+        const pollRes = await fetch(`${JUDGE0_BASE_URL}/submissions/${data.token}?base64_encoded=false`);
+        if (pollRes.ok) data = await pollRes.json();
+      } catch {
+        // ignore transient poll errors — we'll retry the loop condition
+      }
+      pollAttempts++;
+    }
+
+    if (isPending(data)) {
+      if (isLastAttempt) {
+        return { error: `Judge0 timed out while ${data.status?.description ?? "processing"}` };
+      }
+      continue;
+    }
+
+    return { data };
+  }
+
+  return { error: "Judge0 did not respond after several attempts" };
+}
+
 // ── POST handler ──────────────────────────────────────────────────────────────
 export async function POST(request: Request) {
   const payload = await request.json();
@@ -347,30 +485,29 @@ export async function POST(request: Request) {
 
   const { code: fullCode, stdin } = buildDriver(language, code, functionName, args, params);
 
-  try {
-    const res = await fetch("https://ce.judge0.com/submissions?wait=true", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source_code: fullCode,
-        language_id: languageId,
-        stdin,
-      }),
-    });
+  const { data, error } = await runOnJudge0(fullCode, languageId, stdin);
 
-    const data = await res.json();
-    console.log("[run] judge0 status:", data.status?.description, "| stderr:", data.stderr?.slice(0, 200));
-
-    return NextResponse.json({
-      stdout: data.stdout ?? "",
-      stderr: data.stderr ?? data.compile_output ?? "",
-      exitCode: data.status?.id === 3 ? 0 : 1,
-    });
-  } catch (err) {
-    console.error("[run] error:", err);
+  if (error || !data) {
+    console.error("[run] judge0 error:", error);
     return NextResponse.json(
-      { error: "Code execution failed", detail: String(err) },
-      { status: 500 }
+      { error: `Judge service error: ${error ?? "unknown error"}` },
+      { status: 502 }
     );
   }
+
+  console.log(
+    "[run] judge0 status:",
+    data.status?.description,
+    "| stderr:",
+    (data.stderr ?? "").slice(0, 200)
+  );
+
+  return NextResponse.json({
+    stdout: data.stdout ?? "",
+    stderr: data.stderr ?? data.compile_output ?? data.message ?? "",
+    statusId: data.status?.id ?? null,
+    statusDescription: data.status?.description ?? null,
+    exitCode: data.status?.id === 3 ? 0 : 1,
+  });
 }
+

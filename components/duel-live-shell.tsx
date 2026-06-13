@@ -35,10 +35,22 @@ type Problem = {
   };
 };
 
+type VerdictResult = {
+  input: string;
+  expected: string;
+  actual: string;
+  passed: boolean;
+  isHidden: boolean;
+  error?: string;
+  isJudgeError?: boolean;
+};
+
 type Verdict = {
   verdict: string;
   passedTests: number;
   totalTests: number;
+  hasJudgeErrors?: boolean;
+  results?: VerdictResult[];
 };
 
 type MatchResult = {
@@ -459,12 +471,47 @@ export function DuelLiveShell({
               {verdict && (
                 <div className={[
                   "rounded-xl border px-4 py-1.5 text-sm font-semibold",
-                  verdict.verdict === "AC" ? "border-lime/30 bg-lime/10 text-lime" : "border-red-500/30 bg-red-500/10 text-red-400",
+                  verdict.verdict === "AC"
+                    ? "border-lime/30 bg-lime/10 text-lime"
+                    : verdict.hasJudgeErrors
+                      ? "border-gold/30 bg-gold/10 text-gold"
+                      : "border-red-500/30 bg-red-500/10 text-red-400",
                 ].join(" ")}>
-                  {verdict.verdict === "AC" ? "✓ Accepted" : "✗ Wrong Answer"} — {verdict.passedTests}/{verdict.totalTests} tests
+                  {verdict.verdict === "AC" ? "✓ Accepted" : verdict.hasJudgeErrors ? "⚠ Judge error" : "✗ Wrong Answer"} — {verdict.passedTests}/{verdict.totalTests} tests
                 </div>
               )}
             </div>
+            {verdict && verdict.hasJudgeErrors && (
+              <p className="mt-2 rounded-xl border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold">
+                The grading service had trouble running one or more tests (often a temporary rate limit on the free judge). This may not be a problem with your code — wait a few seconds and submit again.
+              </p>
+            )}
+            {verdict && verdict.results && verdict.results.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {verdict.results.map((r, i) => (
+                  <div key={i} className={[
+                    "rounded-lg border px-3 py-2 text-xs",
+                    r.passed ? "border-lime/20 bg-lime/5 text-white/70" : "border-red-500/20 bg-red-500/5 text-white/70",
+                  ].join(" ")}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold">
+                        {r.passed ? "✓" : r.isJudgeError ? "⚠" : "✗"} Test {i + 1}
+                      </span>
+                      <span className="text-white/40">input: <code>{r.input}</code></span>
+                    </div>
+                    {!r.passed && (
+                      <p className="mt-1 text-white/50">
+                        {r.error
+                          ? r.isJudgeError
+                            ? `Judge error: ${r.error}`
+                            : `Error: ${r.error}`
+                          : `Expected ${r.expected}, got ${r.actual || "(empty)"}`}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Opponent editor */}
