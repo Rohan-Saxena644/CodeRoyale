@@ -967,7 +967,7 @@ export const problemSeeds: CompetitiveProblem[] = [
       { args: [[1,1,2,2,2,3]], expectedOutput: [2,2,2,1,1,3], isHidden: false },
       { args: [[2,3,1,3,2]], expectedOutput: [3,3,2,2,1], isHidden: false },
       { args: [[1]], expectedOutput: [1], isHidden: true },
-      { args: [[-1,1,-6,4,5,-6,1,4,1]], expectedOutput: [1,1,1,-6,-6,4,4,5,-1], isHidden: true },
+      { args: [[-1,1,-6,4,5,-6,1,4,1]], expectedOutput: [1,1,1,4,4,-6,-6,5,-1], isHidden: true },
     ],
     sourceKind: "permissive",
   },
