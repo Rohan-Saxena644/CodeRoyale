@@ -1,8 +1,10 @@
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-export const runtime = "nodejs";
+import { buildDriver, languageIds, runOnJudge0 } from "@/lib/judge";
 
 const submitSchema = z.object({
   matchId: z.string(),
@@ -11,7 +13,6 @@ const submitSchema = z.object({
   code: z.string(),
 });
 
-// Small delay helper — gives Judge0 CE breathing room between requests
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -31,52 +32,47 @@ type RunOutcome = {
   isJudgeError?: boolean;
 };
 
-// Extra attempts (with backoff) if /api/run itself reports a judge/infra
-// failure (Judge0 unreachable, rate-limited, etc.) — as opposed to a
-// compile error or thrown exception in the user's own code, which is a
-// real result and should NOT be retried.
+// Calls Judge0 directly (no internal HTTP fetch) with retry logic for
+// transient judge/infra failures. Compile errors or wrong answers from
+// the user's own code are NOT retried — only judge-side failures are.
 const RUN_RETRY_DELAYS_MS = [800, 1600];
 
-async function runOneTest(appUrl: string, payload: RunPayload): Promise<RunOutcome> {
+async function runOneTest(payload: RunPayload): Promise<RunOutcome> {
+  const languageId = languageIds[payload.language];
+  if (!languageId) {
+    return { actual: "", runError: `Unsupported language: ${payload.language}` };
+  }
+
+  const { code: fullCode, stdin } = buildDriver(
+    payload.language,
+    payload.code,
+    payload.functionName,
+    payload.args,
+    payload.params
+  );
+
   for (let attempt = 0; attempt <= RUN_RETRY_DELAYS_MS.length; attempt++) {
     if (attempt > 0) await sleep(RUN_RETRY_DELAYS_MS[attempt - 1]);
     const isLastAttempt = attempt === RUN_RETRY_DELAYS_MS.length;
 
-    try {
-      const res = await fetch(`${appUrl}/api/run`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const { data, error } = await runOnJudge0(fullCode, languageId, stdin);
 
-      if (!res.ok) {
-        // /api/run returns 502 when Judge0 is unreachable/rate-limited even
-        // after its own internal retries — that's an infra issue, retry here.
-        if (!isLastAttempt) continue;
-        return { actual: "", runError: `Run API returned ${res.status}`, isJudgeError: true };
-      }
-
-      const data = await res.json();
-
-      if (data.error) {
-        if (!isLastAttempt) continue;
-        return { actual: "", runError: data.error, isJudgeError: true };
-      }
-
-      if (!data.stdout && data.stderr) {
-        // Compile error or thrown exception in the USER's code — a real
-        // result, not a judge issue, so don't retry.
-        return { actual: "", runError: String(data.stderr).slice(0, 200) };
-      }
-
-      return { actual: (data.stdout ?? "").trim() };
-    } catch (err) {
+    if (error || !data) {
       if (!isLastAttempt) continue;
-      return { actual: "", runError: `Network error: ${String(err)}`, isJudgeError: true };
+      return { actual: "", runError: `Judge error: ${error ?? "unknown"}`, isJudgeError: true };
     }
+
+    // Compile error or exception in the user's code — a real result, don't retry.
+    if (!data.stdout && (data.stderr || data.compile_output)) {
+      return {
+        actual: "",
+        runError: String(data.stderr ?? data.compile_output ?? "").slice(0, 200),
+      };
+    }
+
+    return { actual: (data.stdout ?? "").trim() };
   }
 
-  // Unreachable, but keeps TypeScript happy.
   return { actual: "", runError: "Run failed after retries", isJudgeError: true };
 }
 
@@ -109,13 +105,8 @@ export async function POST(request: Request) {
     };
 
     const testCases = rawJson.testCases ?? [];
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
-    // ── Run test cases SEQUENTIALLY ──────────────────────────────────────────
-    // Judge0 CE (free public instance) rate-limits concurrent requests.
-    // Promise.all caused all 4 to fire at once → some got throttled → null stdout
-    // → "WA" even for correct code. Sequential with a gap, plus retries inside
-    // runOneTest for judge/infra failures, fixes this.
+    // Run test cases sequentially — Judge0 CE rate-limits concurrent requests.
     const runResults: {
       input: string;
       expected: string;
@@ -132,7 +123,7 @@ export async function POST(request: Request) {
       // Gap between requests to stay within Judge0 CE rate limits
       if (i > 0) await sleep(600);
 
-      const { actual, runError, isJudgeError } = await runOneTest(appUrl, {
+      const { actual, runError, isJudgeError } = await runOneTest({
         language,
         code,
         functionName: rawJson.functionSignature.name,
@@ -159,10 +150,6 @@ export async function POST(request: Request) {
     const passedTests = runResults.filter((r) => r.passed).length;
     const allPassed = passedTests === totalTests;
     const verdict = allPassed ? "AC" : "WA";
-    // True if ANY test (including hidden ones) failed because the judge
-    // itself had trouble — not because the code produced a wrong answer.
-    // Surfaced to the client so a 0/N result doesn't look like "your code
-    // is wrong" when it's actually "the grading service is having issues".
     const hasJudgeErrors = runResults.some((r) => r.isJudgeError);
 
     const submission = await prisma.submission.create({
