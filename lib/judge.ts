@@ -306,37 +306,125 @@ export function buildDriver(
   }
 
   // ── Rust ─────────────────────────────────────────────────────────────────
+  // Judge0 CE does NOT have serde_json available (no Cargo.toml support).
+  // Instead we embed all arguments as Rust literals directly in the source,
+  // exactly like the C++ and Java drivers do — no stdin parsing needed.
   if (language === "rust") {
-    const paramTypes = (params ?? []).map((p) => rustTypeMap[p.type] ?? "i64");
     const callArgs = (params ?? []).map((_, i) => `_p${i}`).join(", ");
 
-    const letBindings = (params ?? [])
+    // Build a Rust literal from a JS value for the given type string.
+    function toRustLiteral(value: unknown, type: string): string {
+      if (type === "boolean") return value ? "true" : "false";
+      if (type === "number") return String(value);
+      if (type === "string") {
+        const escaped = String(value)
+          .replace(/\\/g, "\\\\")
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, "\\n")
+          .replace(/\r/g, "\\r")
+          .replace(/\t/g, "\\t");
+        return `String::from("${escaped}")`;
+      }
+      if (type === "number[]" && Array.isArray(value)) {
+        return `vec![${(value as number[]).join(", ")}]`;
+      }
+      if (type === "string[]" && Array.isArray(value)) {
+        const items = (value as string[]).map((s) => {
+          const esc = s
+            .replace(/\\/g, "\\\\")
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, "\\n");
+          return `String::from("${esc}")`;
+        });
+        return `vec![${items.join(", ")}]`;
+      }
+      return String(value);
+    }
+
+    // Build a Rust serialiser that converts the result to a JSON-compatible string
+    // using only std — no external crates.
+    function rustResultToJson(returnType: string): string {
+      switch (returnType) {
+        case "number":
+        case "boolean":
+          return `println!("{}", _result);`;
+        case "string":
+          // Escape the string and wrap in quotes so it matches JSON output
+          return [
+            `let _escaped = _result`,
+            `    .replace('\\\\', "\\\\\\\\")`,
+            `    .replace('"', "\\\\\"")`,
+            `    .replace('\\n', "\\\\n");`,
+            `println!("\"{}\"", _escaped);`,
+          ].join("\n    ");
+        case "number[]":
+          return [
+            `let _parts: Vec<String> = _result.iter().map(|x| x.to_string()).collect();`,
+            `println!("[{}]", _parts.join(","));`,
+          ].join("\n    ");
+        case "string[]":
+          return [
+            `let _parts: Vec<String> = _result.iter().map(|s| {`,
+            `    let esc = s.replace('\\\\', "\\\\\\\\").replace('"', "\\\\\"");`,
+            `    format!("\"{}\"", esc)`,
+            `}).collect();`,
+            `println!("[{}]", _parts.join(","));`,
+          ].join("\n    ");
+        case "boolean[]":
+          return [
+            `let _parts: Vec<String> = _result.iter().map(|b| b.to_string()).collect();`,
+            `println!("[{}]", _parts.join(","));`,
+          ].join("\n    ");
+        default:
+          // fallback — just print with Display
+          return `println!("{}", _result);`;
+      }
+    }
+
+    // Detect returnType from params context (caller passes it as an extra field)
+    // We infer it from the rustTypeMap of the return annotation if available.
+    // The submit route passes returnType alongside params — grab it here.
+    // For the run route (no returnType), infer from output type.
+    const retType = (params as unknown as { returnType?: string } | undefined)?.returnType
+      ?? "number";
+
+    // For number params we store as i64 (the widest integer) so the literal
+    // always fits, then pass it through. If the user's function takes i32,
+    // Rust's type inference will coerce — but to be safe we cast explicitly.
+    const argDecls = (params ?? [])
       .map((p, i) => {
         const rt = rustTypeMap[p.type] ?? "i64";
-        return `    let _p${i}: ${rt} = serde_json::from_value(_raw[${i}].clone()).unwrap();`;
+        const lit = toRustLiteral(args[i], p.type);
+        return `    let _p${i}: ${rt} = ${lit};`;
       })
       .join("\n");
 
+    // When calling the function, cast number args to allow user to use i32/i64/usize freely
+    const callArgsWithCast = (params ?? [])
+      .map((p, i) => {
+        if (p.type === "number") return `_p${i} as _`;
+        return `_p${i}`;
+      })
+      .join(", ");
+
+    const printResult = rustResultToJson(retType);
+
+    // Strip any fn main() the user may have written in their stub
     const stripped = userCode
       .replace(/fn\s+main\s*\(\s*\)\s*\{[\s\S]*?\n\}/m, "")
       .trim();
 
     const code = [
-      "use std::io::{self, Read};",
-      "",
       stripped,
       "",
       "fn main() {",
-      "    let mut input = String::new();",
-      "    io::stdin().read_to_string(&mut input).unwrap();",
-      "    let _raw: Vec<serde_json::Value> = serde_json::from_str(&input).unwrap();",
-      letBindings,
-      `    let _result = ${functionName}(${callArgs});`,
-      '    println!("{}", serde_json::to_string(&_result).unwrap());',
+      argDecls,
+      `    let _result = ${functionName}(${callArgsWithCast});`,
+      `    ${printResult}`,
       "}",
     ].join("\n");
 
-    return { code, stdin: argsJson };
+    return { code, stdin: "" };
   }
 
   // fallback
