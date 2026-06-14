@@ -19,13 +19,11 @@ export function JoinRoomForm() {
     startTransition(async () => {
       const response = await fetch("/api/match/join", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           inviteCode: formData.get("inviteCode"),
-          guestName: formData.get("guestName")
-        })
+          guestName: formData.get("guestName"),
+        }),
       });
 
       const data = (await response.json()) as { error?: string; roomUrl?: string };
@@ -40,18 +38,21 @@ export function JoinRoomForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card-border rounded-[28px] border border-white/10 bg-black/20 p-6">
-      <div className="mb-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-lime">Join a duel</p>
-        <h2 className="mt-3 text-2xl font-semibold text-white">Enter an invite code</h2>
-        <p className="mt-3 text-sm leading-6 text-white/70">
-          Got an invite code from your opponent? Enter it here to join their room.
-        </p>
-      </div>
+    <form
+      onSubmit={handleSubmit}
+      className="card-border rounded-[28px] border border-white/10 bg-black/20 p-6"
+    >
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-lime">Join a duel</p>
+      <h2 className="mt-3 text-2xl font-semibold text-white">Enter an invite code</h2>
+      <p className="mt-2 text-sm leading-6 text-white/60">
+        Got a code from your opponent? Enter it here to jump into their room.
+      </p>
 
-      <div className="grid gap-5">
+      <div className="mt-6 grid gap-5">
         <label className="space-y-2 text-sm text-white/75">
-          <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Your name</span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+            Your name
+          </span>
           <input
             name="guestName"
             required
@@ -61,7 +62,9 @@ export function JoinRoomForm() {
         </label>
 
         <label className="space-y-2 text-sm text-white/75">
-          <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Invite code</span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+            Invite code
+          </span>
           <input
             name="inviteCode"
             required
@@ -78,7 +81,7 @@ export function JoinRoomForm() {
           disabled={isPending}
           className="rounded-full bg-lime px-6 py-3 font-semibold text-ink transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPending ? "Joining..." : "Join by code"}
+          {isPending ? "Joining…" : "Join by code"}
         </button>
       </div>
 
