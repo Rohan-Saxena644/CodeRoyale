@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { MatchConfig, MatchStatus } from "@/lib/types";
 
 type RoomShellProps = {
@@ -36,7 +35,9 @@ export function RoomShell({
 }: RoomShellProps) {
   const roomHeadline =
     matchStatus === "countdown"
-      ? `Match starts in ${countdownLeft ?? 0}`
+      ? countdownLeft != null
+        ? `Match starts in ${countdownLeft}s`
+        : "Match starting…"
       : matchStatus === "active"
         ? "Duel is ready to begin"
         : guestName
@@ -44,10 +45,12 @@ export function RoomShell({
           : "Waiting for opponent";
   const roomSubcopy =
     matchStatus === "countdown"
-      ? "Both players are locked in. Get ready for the editor room."
+      ? "Both players are locked in. Get ready — the editor room is loading."
       : matchStatus === "active"
-        ? "Countdown finished. The next step is routing both players into the live duel workspace."
-        : "Invite-code joining is now live in the app. The next step is wiring Socket.IO presence, ready events, countdown transitions, and persistent room state so both clients update without refreshes.";
+        ? "Match is live. Routing you to the duel workspace now."
+        : guestName
+          ? "Both players are here. Mark yourself ready to start the countdown."
+          : "Share the invite code with your opponent so they can join.";
   const viewerReady = viewerRole === "host" ? hostReady : guestReady;
   const canReadyUp = Boolean(hostName && guestName) && matchStatus !== "active";
   const leaveWarning =
@@ -142,14 +145,6 @@ export function RoomShell({
           <p className="mt-2">{leaveWarning}</p>
         </div>
 
-        <div className="mt-8 rounded-[24px] border border-gold/35 bg-gold/10 p-5">
-          <p className="text-sm font-semibold text-gold">Planned next for this room</p>
-          <ul className="mt-3 space-y-2 text-sm text-white/78">
-            <li>Socket event flow now handles room presence, ready state, and the synced countdown</li>
-            <li>Next up: route both players into Monaco once the countdown completes</li>
-            <li>After that, the duel room can own the timer, problem panel, and live code sync</li>
-          </ul>
-        </div>
       </article>
 
       <aside className="space-y-6">
@@ -193,20 +188,6 @@ export function RoomShell({
           </dl>
         </div>
 
-        <div className="card-border rounded-[28px] border border-white/10 bg-black/20 p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Dev mode stance</p>
-          <p className="mt-4 text-sm leading-6 text-white/72">
-            Your repo now encodes the stronger interpretation: dev mode is primarily code-repair with starter
-            projects, while theory MCQs stay as a future optional content lane for interviews or warmups.
-          </p>
-        </div>
-
-        <Link
-          href="/match"
-          className="inline-flex rounded-full border border-white/10 bg-white px-5 py-3 font-semibold text-ink"
-        >
-          Create another room
-        </Link>
       </aside>
     </section>
   );
