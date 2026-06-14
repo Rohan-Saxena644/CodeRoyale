@@ -156,10 +156,7 @@ export function MatchForm() {
         </label>
       )}
 
-      <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="text-sm text-white/55">
-          Current assumption: dev mode leads with starter-code bug fixing, not MCQ-only rounds.
-        </div>
+      <div className="mt-6 flex justify-end">
         <button
           type="submit"
           disabled={isPending}

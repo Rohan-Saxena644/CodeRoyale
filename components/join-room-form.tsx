@@ -45,8 +45,7 @@ export function JoinRoomForm() {
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-lime">Join a duel</p>
         <h2 className="mt-3 text-2xl font-semibold text-white">Enter an invite code</h2>
         <p className="mt-3 text-sm leading-6 text-white/70">
-          This is the first real join path. A second player can use the code from the host room and land in the
-          exact same duel setup.
+          Got an invite code from your opponent? Enter it here to join their room.
         </p>
       </div>
 
@@ -73,8 +72,7 @@ export function JoinRoomForm() {
         </label>
       </div>
 
-      <div className="mt-6 flex items-center justify-between gap-4">
-        <p className="text-sm text-white/55">Current version supports one host and one guest in the same room.</p>
+      <div className="mt-6 flex justify-end">
         <button
           type="submit"
           disabled={isPending}
