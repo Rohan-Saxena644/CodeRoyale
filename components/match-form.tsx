@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { DevCategory, DuelLanguage, MatchConfig, ModeKind } from "@/lib/types";
 
-const duelLanguages: DuelLanguage[] = ["python", "javascript", "cpp", "go", "rust","java"];
+const duelLanguages: DuelLanguage[] = ["python", "javascript", "cpp", "go", "rust", "java"];
 const devCategories: DevCategory[] = ["react-ui", "express-api", "go-backend", "rust-backend", "next-actions"];
 
 export function MatchForm() {
@@ -24,11 +24,7 @@ export function MatchForm() {
 
     const formData = new FormData(event.currentTarget);
 
-    const payload: MatchConfig = {
-      mode,
-      difficulty
-    };
-
+    const payload: MatchConfig = { mode, difficulty };
     if (mode === "competitive") {
       payload.duelLanguage = duelLanguage;
     } else {
@@ -38,17 +34,12 @@ export function MatchForm() {
     startTransition(async () => {
       const response = await fetch("/api/match", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          hostName: formData.get("hostName"),
-          config: payload
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostName: formData.get("hostName"), config: payload }),
       });
 
       if (!response.ok) {
-        setError("Could not create a room. Check the route or payload and try again.");
+        setError("Could not create a room. Please try again.");
         return;
       }
 
@@ -58,11 +49,20 @@ export function MatchForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card-border rounded-[28px] border border-white/10 bg-panel/90 p-6">
-      <div className="grid gap-6 md:grid-cols-2">
+    <form
+      onSubmit={handleSubmit}
+      className="card-border rounded-[28px] border border-white/10 bg-panel/90 p-6"
+    >
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Host a duel</p>
+      <h2 className="mt-3 text-2xl font-semibold text-white">Create a room</h2>
+      <p className="mt-2 text-sm leading-6 text-white/60">
+        Set up the room and share the invite code with your opponent.
+      </p>
+
+      <div className="mt-6 grid gap-6 md:grid-cols-2">
         <label className="space-y-2 text-sm text-white/75">
           <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-            Host name
+            Your name
           </span>
           <input
             name="hostName"
@@ -78,7 +78,7 @@ export function MatchForm() {
           </span>
           <select
             value={difficulty}
-            onChange={(event) => setDifficulty(event.target.value as MatchConfig["difficulty"])}
+            onChange={(e) => setDifficulty(e.target.value as MatchConfig["difficulty"])}
             className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-gold/60"
           >
             <option value="easy">Easy</option>
@@ -95,12 +95,12 @@ export function MatchForm() {
           className={`rounded-[24px] border px-5 py-4 text-left transition ${
             mode === "competitive"
               ? "border-lime/50 bg-lime/10 text-white"
-              : "border-white/10 bg-black/15 text-white/70"
+              : "border-white/10 bg-black/15 text-white/70 hover:border-white/20"
           }`}
         >
           <span className="block text-sm font-semibold text-lime">Competitive</span>
           <span className="mt-1 block text-sm leading-6">
-            Solve the same generated DSA-style problem and win by passing tests first.
+            Solve the same DSA problem and win by passing all tests first.
           </span>
         </button>
 
@@ -110,12 +110,12 @@ export function MatchForm() {
           className={`rounded-[24px] border px-5 py-4 text-left transition ${
             mode === "dev"
               ? "border-gold/50 bg-gold/10 text-white"
-              : "border-white/10 bg-black/15 text-white/70"
+              : "border-white/10 bg-black/15 text-white/70 hover:border-white/20"
           }`}
         >
           <span className="block text-sm font-semibold text-gold">Developer</span>
           <span className="mt-1 block text-sm leading-6">
-            Repair realistic starter code and let assertions decide whether the fix is actually correct.
+            Repair realistic starter code and let assertions decide the winner.
           </span>
         </button>
       </div>
@@ -123,16 +123,16 @@ export function MatchForm() {
       {mode === "competitive" ? (
         <label className="mt-6 block space-y-2 text-sm text-white/75">
           <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-            Target language
+            Language
           </span>
           <select
             value={duelLanguage}
-            onChange={(event) => setDuelLanguage(event.target.value as DuelLanguage)}
+            onChange={(e) => setDuelLanguage(e.target.value as DuelLanguage)}
             className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-lime/60"
           >
-            {duelLanguages.map((item) => (
-              <option key={item} value={item}>
-                {item}
+            {duelLanguages.map((lang) => (
+              <option key={lang} value={lang}>
+                {lang}
               </option>
             ))}
           </select>
@@ -140,16 +140,16 @@ export function MatchForm() {
       ) : (
         <label className="mt-6 block space-y-2 text-sm text-white/75">
           <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-            Dev category
+            Category
           </span>
           <select
             value={devCategory}
-            onChange={(event) => setDevCategory(event.target.value as DevCategory)}
+            onChange={(e) => setDevCategory(e.target.value as DevCategory)}
             className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-gold/60"
           >
-            {devCategories.map((item) => (
-              <option key={item} value={item}>
-                {item}
+            {devCategories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
               </option>
             ))}
           </select>
@@ -162,7 +162,7 @@ export function MatchForm() {
           disabled={isPending}
           className="rounded-full bg-white px-6 py-3 font-semibold text-ink transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPending ? "Creating room..." : "Create duel room"}
+          {isPending ? "Creating room…" : "Create duel room"}
         </button>
       </div>
 
