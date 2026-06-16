@@ -1,6 +1,4 @@
-"use client";
-
-import { useState } from "react";
+import Link from "next/link";
 import type { MatchConfig, MatchStatus } from "@/lib/types";
 
 type RoomShellProps = {
@@ -34,151 +32,75 @@ export function RoomShell({
   connectionState = "disconnected",
   onReadyToggle,
   onLeaveRoom,
-  isReadyPending = false,
+  isReadyPending = false
 }: RoomShellProps) {
-  // ── Copy-to-clipboard state ──────────────────────────────────────────────
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    navigator.clipboard.writeText(inviteCode).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  // ── Derived display values ───────────────────────────────────────────────
   const roomHeadline =
     matchStatus === "countdown"
-      ? countdownLeft != null
-        ? `Match starts in ${countdownLeft}s`
-        : "Match starting…"
+      ? countdownLeft != null ? `Match starts in ${countdownLeft}s` : "Match starting…"
       : matchStatus === "active"
-        ? "Duel is live"
+        ? "Duel is ready to begin"
         : guestName
           ? "Both players are in the room"
-          : "Waiting for opponent…";
-
+          : "Waiting for opponent";
   const roomSubcopy =
     matchStatus === "countdown"
-      ? "Both players are locked in. Get ready — the editor room is loading."
+      ? "Both players are locked in. Get ready — the editor is loading."
       : matchStatus === "active"
         ? "Match is live. Routing you to the duel workspace now."
         : guestName
           ? "Both players are here. Mark yourself ready to start the countdown."
           : "Share the invite code with your opponent so they can join.";
-
   const viewerReady = viewerRole === "host" ? hostReady : guestReady;
   const canReadyUp = Boolean(hostName && guestName) && matchStatus !== "active";
   const leaveWarning =
     matchStatus === "countdown" || matchStatus === "active"
-      ? "Leaving now will drop you from the room and forfeit the match."
-      : "Leaving returns you to matchmaking. Your room slot will be freed.";
+      ? "Leaving this tab or pressing leave will drop you from the room and end this match flow for now."
+      : "Leaving the room returns you to matchmaking. If you close this tab later, the room presence is lost.";
 
   return (
     <section className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
       <article className="card-border rounded-[28px] border border-white/10 bg-panel/92 p-6">
-
-        {/* ── Header: status + invite code ─────────────────────────────── */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-lime">
-              Room status
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">
-              {roomHeadline}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">
-              {roomSubcopy}
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-lime">Room status</p>
+            <h1 className="mt-2 text-3xl font-semibold text-white">{roomHeadline}</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">{roomSubcopy}</p>
           </div>
-
-          {/* Invite code card with copy button */}
           <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-right">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/45">
-              Invite code
-            </div>
+            <div className="text-xs uppercase tracking-[0.18em] text-white/45">Invite code</div>
             <div className="mt-1 font-mono text-2xl text-gold">{inviteCode}</div>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className={`mt-2 rounded-full px-3 py-1 text-xs font-semibold transition-all duration-200 ${
-                copied
-                  ? "bg-lime/20 text-lime"
-                  : "bg-white/8 text-white/60 hover:bg-white/15 hover:text-white"
-              }`}
-            >
-              {copied ? "✓ Copied!" : "Copy code"}
-            </button>
           </div>
         </div>
 
-        {/* ── Player slots ─────────────────────────────────────────────── */}
         <div className="mt-8 grid gap-4 md:grid-cols-2">
-          {/* Host slot */}
           <div className="rounded-3xl border border-white/10 bg-black/15 p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-white/45">Host</p>
             <p className="mt-2 text-lg font-semibold text-white">{hostName}</p>
-            <div className="mt-2 flex items-center gap-2">
-              {hostReady ? (
-                <>
-                  <span className="h-2 w-2 rounded-full bg-lime" />
-                  <span className="text-sm text-lime">Ready</span>
-                </>
-              ) : (
-                <>
-                  <span className="h-2 w-2 rounded-full bg-white/25" />
-                  <span className="text-sm text-white/45">
-                    {viewerRole === "host" ? "You created this room" : "Not ready"}
-                  </span>
-                </>
-              )}
-            </div>
+            <p className="mt-2 text-sm text-lime">
+              {hostReady ? "Ready" : viewerRole === "host" ? "You created this room" : "Host joined"}
+            </p>
           </div>
-
-          {/* Guest slot */}
           <div
-            className={`rounded-3xl p-5 transition-all duration-300 ${
+            className={`rounded-3xl p-5 ${
               guestName
                 ? "border border-white/10 bg-black/15"
                 : "border border-dashed border-white/15 bg-black/10"
             }`}
           >
             <p className="text-xs uppercase tracking-[0.18em] text-white/45">Opponent</p>
-            {guestName ? (
-              <>
-                <p className="mt-2 text-lg font-semibold text-white">{guestName}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  {guestReady ? (
-                    <>
-                      <span className="h-2 w-2 rounded-full bg-lime" />
-                      <span className="text-sm text-lime">Ready</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="h-2 w-2 rounded-full bg-white/25" />
-                      <span className="text-sm text-white/45">
-                        {viewerRole === "guest" ? "You joined" : "Not ready yet"}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="mt-2 text-lg font-semibold text-white/30">Open slot</p>
-                {/* Waiting animation */}
-                <div className="mt-2 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/30 [animation-delay:0ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/30 [animation-delay:150ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-white/30 [animation-delay:300ms]" />
-                  <span className="ml-1 text-sm text-white/40">Waiting for opponent</span>
-                </div>
-              </>
-            )}
+            <p className="mt-2 text-lg font-semibold text-white/72">{guestName ?? "Open slot"}</p>
+            <p className="mt-2 text-sm text-white/45">
+              {guestName
+                ? guestReady
+                  ? "Ready"
+                  : viewerRole === "guest"
+                    ? "You joined with the invite code"
+                    : "A second player has claimed the room"
+                : "Another player can now join from /match using the invite code"}
+            </p>
           </div>
         </div>
 
-        {/* ── Ready check ──────────────────────────────────────────────── */}
         <div className="mt-6 flex flex-col gap-4 rounded-[24px] border border-lime/25 bg-lime/10 p-5 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-lime">Ready check</p>
@@ -186,11 +108,11 @@ export function RoomShell({
               {canReadyUp
                 ? viewerReady
                   ? matchStatus === "countdown"
-                    ? "Countdown is live. You can still unready to cancel."
-                    : "You are locked in. Unready if you want to change."
+                    ? "Countdown is live. You can still unready right now to cancel the start."
+                    : "You are locked in. Unready if you want to change your selection."
                   : matchStatus === "countdown"
-                    ? "If either player unreadies, the countdown resets."
-                    : "Both players are here. Mark yourself ready to start."
+                    ? "If either player unreadies during countdown, the room goes back to waiting."
+                    : "Both players are here. Mark yourself ready to start the countdown."
                 : "The ready button activates once both players are in the room."}
             </p>
           </div>
@@ -200,10 +122,12 @@ export function RoomShell({
               onClick={onReadyToggle}
               disabled={!canReadyUp || connectionState !== "connected" || isReadyPending}
               className={`rounded-full px-6 py-3 font-semibold transition ${
-                viewerReady ? "bg-white text-ink" : "bg-lime text-ink"
+                viewerReady
+                  ? "bg-white text-ink"
+                  : "bg-lime text-ink"
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
-              {isReadyPending ? "Updating…" : viewerReady ? "Unready" : "Ready up"}
+              {isReadyPending ? "Updating..." : viewerReady ? "Unready" : "Ready up"}
             </button>
             <button
               type="button"
@@ -215,19 +139,24 @@ export function RoomShell({
           </div>
         </div>
 
-        {/* ── Leave warning ─────────────────────────────────────────────── */}
         <div className="mt-4 rounded-[20px] border border-coral/35 bg-coral/10 p-4 text-sm text-white/78">
           <p className="font-semibold text-coral">Room warning</p>
           <p className="mt-2">{leaveWarning}</p>
         </div>
+
+        <div className="mt-8 rounded-[24px] border border-gold/35 bg-gold/10 p-5">
+          <p className="text-sm font-semibold text-gold">Planned next for this room</p>
+          <ul className="mt-3 space-y-2 text-sm text-white/78">
+            <li>Socket event flow now handles room presence, ready state, and the synced countdown</li>
+            <li>Next up: route both players into Monaco once the countdown completes</li>
+            <li>After that, the duel room can own the timer, problem panel, and live code sync</li>
+          </ul>
+        </div>
       </article>
 
-      {/* ── Sidebar: config ───────────────────────────────────────────────── */}
       <aside className="space-y-6">
         <div className="card-border rounded-[28px] border border-white/10 bg-black/20 p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
-            Configuration
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Configuration</p>
           <dl className="mt-4 space-y-4 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-white/55">Mode</dt>
@@ -239,16 +168,14 @@ export function RoomShell({
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-white/55">Track</dt>
-              <dd className="font-medium text-white">
-                {config.duelLanguage ?? config.devCategory}
-              </dd>
+              <dd className="font-medium text-white">{config.duelLanguage ?? config.devCategory}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-white/55">Room ID</dt>
+              <dt className="text-white/55">Room id</dt>
               <dd className="font-mono text-xs text-white/75">{roomId}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-white/55">Your role</dt>
+              <dt className="text-white/55">Viewer role</dt>
               <dd className="font-medium capitalize text-white">{viewerRole}</dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -267,6 +194,21 @@ export function RoomShell({
             </div>
           </dl>
         </div>
+
+        <div className="card-border rounded-[28px] border border-white/10 bg-black/20 p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Dev mode stance</p>
+          <p className="mt-4 text-sm leading-6 text-white/72">
+            Your repo now encodes the stronger interpretation: dev mode is primarily code-repair with starter
+            projects, while theory MCQs stay as a future optional content lane for interviews or warmups.
+          </p>
+        </div>
+
+        <Link
+          href="/match"
+          className="inline-flex rounded-full border border-white/10 bg-white px-5 py-3 font-semibold text-ink"
+        >
+          Create another room
+        </Link>
       </aside>
     </section>
   );
