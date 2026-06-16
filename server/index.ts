@@ -200,7 +200,15 @@ async function handleRoomDeparture(
     nextState = clearRoomPresence(roomId, role);
     if (nextState) await persistRoomAfterDisconnect(inviteCode, nextState);
   }
-  if (nextState) emitRoomState(roomId, { ...nextState, inviteCode });
+  if (nextState) {
+    emitRoomState(roomId, { ...nextState, inviteCode });
+    // Tell the remaining player who just left so they can show a banner
+    const leaverName =
+      role === "host" ? current.hostName : current.guestName;
+    if (leaverName) {
+      io.to(roomId).emit("player:left", { name: leaverName, role });
+    }
+  }
 }
 
 function scheduleCountdown(
@@ -451,4 +459,3 @@ const port = Number(process.env.PORT ?? 4000);
 httpServer.listen(port, () => {
   console.log(`CodeRoyale socket server listening on http://localhost:${port}`);
 });
-
