@@ -4,18 +4,15 @@ import { useState, useTransition } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import type { DevCategory, DuelLanguage, MatchConfig, ModeKind } from "@/lib/types";
+import type { DuelLanguage, MatchConfig } from "@/lib/types";
 
 const duelLanguages: DuelLanguage[] = ["python", "javascript", "cpp", "go", "rust", "java"];
-const devCategories: DevCategory[] = ["react-ui", "express-api", "go-backend", "rust-backend", "next-actions"];
 
 export function MatchForm() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [mode, setMode] = useState<ModeKind>("competitive");
   const [difficulty, setDifficulty] = useState<MatchConfig["difficulty"]>("medium");
   const [duelLanguage, setDuelLanguage] = useState<DuelLanguage>("javascript");
-  const [devCategory, setDevCategory] = useState<DevCategory>("react-ui");
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -24,18 +21,20 @@ export function MatchForm() {
 
     const formData = new FormData(event.currentTarget);
 
-    const payload: MatchConfig = { mode, difficulty };
-    if (mode === "competitive") {
-      payload.duelLanguage = duelLanguage;
-    } else {
-      payload.devCategory = devCategory;
-    }
+    const payload: MatchConfig = {
+      mode: "competitive",
+      difficulty,
+      duelLanguage,
+    };
 
     startTransition(async () => {
       const response = await fetch("/api/match", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hostName: formData.get("hostName"), config: payload }),
+        body: JSON.stringify({
+          hostName: formData.get("hostName"),
+          config: payload,
+        }),
       });
 
       if (!response.ok) {
@@ -88,73 +87,22 @@ export function MatchForm() {
         </label>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <button
-          type="button"
-          onClick={() => setMode("competitive")}
-          className={`rounded-[24px] border px-5 py-4 text-left transition ${
-            mode === "competitive"
-              ? "border-lime/50 bg-lime/10 text-white"
-              : "border-white/10 bg-black/15 text-white/70 hover:border-white/20"
-          }`}
+      <label className="mt-6 block space-y-2 text-sm text-white/75">
+        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+          Language
+        </span>
+        <select
+          value={duelLanguage}
+          onChange={(e) => setDuelLanguage(e.target.value as DuelLanguage)}
+          className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-lime/60"
         >
-          <span className="block text-sm font-semibold text-lime">Competitive</span>
-          <span className="mt-1 block text-sm leading-6">
-            Solve the same DSA problem and win by passing all tests first.
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setMode("dev")}
-          className={`rounded-[24px] border px-5 py-4 text-left transition ${
-            mode === "dev"
-              ? "border-gold/50 bg-gold/10 text-white"
-              : "border-white/10 bg-black/15 text-white/70 hover:border-white/20"
-          }`}
-        >
-          <span className="block text-sm font-semibold text-gold">Developer</span>
-          <span className="mt-1 block text-sm leading-6">
-            Repair realistic starter code and let assertions decide the winner.
-          </span>
-        </button>
-      </div>
-
-      {mode === "competitive" ? (
-        <label className="mt-6 block space-y-2 text-sm text-white/75">
-          <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-            Language
-          </span>
-          <select
-            value={duelLanguage}
-            onChange={(e) => setDuelLanguage(e.target.value as DuelLanguage)}
-            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-lime/60"
-          >
-            {duelLanguages.map((lang) => (
-              <option key={lang} value={lang}>
-                {lang}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : (
-        <label className="mt-6 block space-y-2 text-sm text-white/75">
-          <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-            Category
-          </span>
-          <select
-            value={devCategory}
-            onChange={(e) => setDevCategory(e.target.value as DevCategory)}
-            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-gold/60"
-          >
-            {devCategories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+          {duelLanguages.map((lang) => (
+            <option key={lang} value={lang}>
+              {lang}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div className="mt-6 flex justify-end">
         <button
