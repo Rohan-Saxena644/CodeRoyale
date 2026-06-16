@@ -180,6 +180,7 @@ export function DuelLiveShell({
   const [timeLeft,        setTimeLeft]        = useState(30 * 60);
   const [matchResult,     setMatchResult]     = useState<MatchResult | null>(null);
   const [emoteToasts,     setEmoteToasts]     = useState<EmoteToast[]>([]);
+  const [opponentLeft,    setOpponentLeft]    = useState<string | null>(null);
 
   const selfHandle     = useMemo(() => viewerRole === "host" ? hostName : guestName ?? "Guest", [guestName, hostName, viewerRole]);
   const myHandle       = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
@@ -262,6 +263,13 @@ export function DuelLiveShell({
       });
     });
 
+    socket.on("player:left", (payload: { name: string; role: "host" | "guest" }) => {
+      // Only show banner if it's the opponent who left, not ourselves
+      if (payload.role !== viewerRoleState) {
+        setOpponentLeft(payload.name);
+      }
+    });
+
     socket.on("emote:receive", (payload: { emote: string; fromRole: "host" | "guest" }) => {
       addEmoteToast(payload.emote, payload.fromRole);
     });
@@ -311,6 +319,22 @@ export function DuelLiveShell({
   // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <main className="relative pb-16">
+
+      {/* ── Opponent left banner ── */}
+      {opponentLeft && (
+        <div className="sticky top-0 z-40 flex items-center justify-between gap-4 bg-coral/90 px-6 py-3 backdrop-blur-sm">
+          <p className="text-sm font-semibold text-white">
+            {opponentLeft} has left the room.
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpponentLeft(null)}
+            className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/30"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Win/Loss Overlay ── */}
       {matchResult && (
