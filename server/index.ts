@@ -26,13 +26,14 @@ const io = new Server(httpServer, {
   cors: {
     origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   },
+  pingTimeout: 20000,
+  pingInterval: 10000,
 });
 
 const roomPresence = new Map<string, RoomPresenceState>();
 const countdownTimers = new Map<string, NodeJS.Timeout>();
 const roomCodeState = new Map<string, { hostCode: string; guestCode: string }>();
-
-// ─── helpers ────────────────────────────────────────────────────────────────
+const emoteRateLimit = new Map<string, number>();
 
 function upsertRoomPresence(
   roomId: string,
@@ -202,7 +203,6 @@ async function handleRoomDeparture(
   }
   if (nextState) {
     emitRoomState(roomId, { ...nextState, inviteCode });
-    // Tell the remaining player who just left so they can show a banner
     const leaverName =
       role === "host" ? current.hostName : current.guestName;
     if (leaverName) {
@@ -237,7 +237,6 @@ function scheduleCountdown(
       .then((res) => res.json())
       .then((data) => {
         if (data.problem) {
-          console.log("[socket] emitting problem:ready to room:", roomId);
           io.to(roomId).emit("problem:ready", data.problem);
         }
       })
@@ -247,13 +246,17 @@ function scheduleCountdown(
   countdownTimers.set(roomId, timer);
 }
 
-// ─── HTTP routes ─────────────────────────────────────────────────────────────
-
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "coderoyale-socket", timestamp: new Date().toISOString() });
+  const uptime = process.uptime();
+  res.json({
+    ok: true,
+    service: "coderoyale-socket",
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor(uptime),
+    activeRooms: roomPresence.size,
+  });
 });
 
-/** Called by /api/submit when a player gets AC */
 app.post("/internal/match-ended", (req, res) => {
   const { roomId, winnerRole } = req.body as {
     roomId: string;
@@ -263,12 +266,9 @@ app.post("/internal/match-ended", (req, res) => {
     res.status(400).json({ error: "roomId and winnerRole required" });
     return;
   }
-  console.log(`[socket] match:ended — room=${roomId} winner=${winnerRole}`);
   io.to(roomId).emit("match:ended", { winnerRole });
   res.json({ ok: true });
 });
-
-// ─── Socket events ────────────────────────────────────────────────────────────
 
 io.on("connection", (socket) => {
   socket.emit("server:hello", { message: "CodeRoyale socket server connected" });
@@ -387,10 +387,16 @@ io.on("connection", (socket) => {
     }
   );
 
-  // ── Emotes ──────────────────────────────────────────────────────────────────
   socket.on(
     "emote:send",
     (payload: { roomId: string; emote: string; fromRole: "host" | "guest" }) => {
+      const key = `${socket.id}:emote`;
+      const last = emoteRateLimit.get(key) ?? 0;
+      const now = Date.now();
+      if (now - last < 1500) return;
+      emoteRateLimit.set(key, now);
+      const allowed = ["👏", "💀", "🔥", "😤", "🤝", "🎯", "⚡", "🧠", "💪", "🤖"];
+      if (!allowed.includes(payload.emote)) return;
       socket.to(payload.roomId).emit("emote:receive", {
         emote: payload.emote,
         fromRole: payload.fromRole,
@@ -398,23 +404,19 @@ io.on("connection", (socket) => {
     }
   );
 
-  // ── Timer expiry ─────────────────────────────────────────────────────────────
-  // Only the host emits this (client-side guard) so it fires exactly once per match.
   socket.on("timer:expired", async (payload: { roomId: string }) => {
     const { roomId } = payload;
 
     try {
-      // Check if already finished — avoid double-firing if AC came in at the same time
       const match = await prisma.match.findUnique({
         where: { id: roomId },
         select: { winnerRole: true, status: true },
       });
 
       if (match?.winnerRole || match?.status === "finished") {
-        return; // already decided
+        return;
       }
 
-      // Find best submission per role
       const submissions = await prisma.submission.findMany({
         where: { matchId: roomId },
         orderBy: { score: "desc" },
@@ -429,11 +431,8 @@ io.on("connection", (socket) => {
       let winnerRole: "host" | "guest" | "draw";
       if (hostScore > guestScore) winnerRole = "host";
       else if (guestScore > hostScore) winnerRole = "guest";
-      else winnerRole = "draw"; // tied or both 0
+      else winnerRole = "draw";
 
-      console.log(`[socket] timer:expired room=${roomId} host=${hostScore} guest=${guestScore} winner=${winnerRole}`);
-
-      // Persist
       await prisma.match.update({
         where: { id: roomId },
         data: {
@@ -450,10 +449,9 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", async () => {
     await handleRoomDeparture(socket);
+    emoteRateLimit.delete(`${socket.id}:emote`);
   });
 });
-
-// ─── Start ────────────────────────────────────────────────────────────────────
 
 const port = Number(process.env.PORT ?? 4000);
 httpServer.listen(port, () => {
