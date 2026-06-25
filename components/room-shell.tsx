@@ -36,12 +36,13 @@ export function RoomShell({
 }: RoomShellProps) {
   const roomHeadline =
     matchStatus === "countdown"
-      ? countdownLeft != null ? `Match starts in ${countdownLeft}s` : "Match starting…"
+      ? countdownLeft != null ? "Match starts in " + countdownLeft + "s" : "Match starting…"
       : matchStatus === "active"
         ? "Duel is ready to begin"
         : guestName
           ? "Both players are in the room"
           : "Waiting for opponent";
+
   const roomSubcopy =
     matchStatus === "countdown"
       ? "Both players are locked in. Get ready — the editor is loading."
@@ -50,12 +51,14 @@ export function RoomShell({
         : guestName
           ? "Both players are here. Mark yourself ready to start the countdown."
           : "Share the invite code with your opponent so they can join.";
+
   const viewerReady = viewerRole === "host" ? hostReady : guestReady;
   const canReadyUp = Boolean(hostName && guestName) && matchStatus !== "active";
+
   const leaveWarning =
     matchStatus === "countdown" || matchStatus === "active"
-      ? "Leaving this tab or pressing leave will drop you from the room and end this match flow for now."
-      : "Leaving the room returns you to matchmaking. If you close this tab later, the room presence is lost.";
+      ? "Leaving this tab or pressing leave will drop you from the room and end this match."
+      : "Leaving the room returns you to matchmaking. If you close this tab, the room presence is lost.";
 
   return (
     <section className="grid gap-6 lg:grid-cols-[1.35fr_0.95fr]">
@@ -81,11 +84,12 @@ export function RoomShell({
             </p>
           </div>
           <div
-            className={`rounded-3xl p-5 ${
-              guestName
+            className={
+              "rounded-3xl p-5 " +
+              (guestName
                 ? "border border-white/10 bg-black/15"
-                : "border border-dashed border-white/15 bg-black/10"
-            }`}
+                : "border border-dashed border-white/15 bg-black/10")
+            }
           >
             <p className="text-xs uppercase tracking-[0.18em] text-white/45">Opponent</p>
             <p className="mt-2 text-lg font-semibold text-white/72">{guestName ?? "Open slot"}</p>
@@ -96,7 +100,7 @@ export function RoomShell({
                   : viewerRole === "guest"
                     ? "You joined with the invite code"
                     : "A second player has claimed the room"
-                : "Another player can now join from /match using the invite code"}
+                : "Another player can join using the invite code from /match"}
             </p>
           </div>
         </div>
@@ -121,11 +125,11 @@ export function RoomShell({
               type="button"
               onClick={onReadyToggle}
               disabled={!canReadyUp || connectionState !== "connected" || isReadyPending}
-              className={`rounded-full px-6 py-3 font-semibold transition ${
-                viewerReady
-                  ? "bg-white text-ink"
-                  : "bg-lime text-ink"
-              } disabled:cursor-not-allowed disabled:opacity-50`}
+              className={
+                "rounded-full px-6 py-3 font-semibold transition " +
+                (viewerReady ? "bg-white text-ink" : "bg-lime text-ink") +
+                " disabled:cursor-not-allowed disabled:opacity-50"
+              }
             >
               {isReadyPending ? "Updating..." : viewerReady ? "Unready" : "Ready up"}
             </button>
@@ -140,17 +144,8 @@ export function RoomShell({
         </div>
 
         <div className="mt-4 rounded-[20px] border border-coral/35 bg-coral/10 p-4 text-sm text-white/78">
-          <p className="font-semibold text-coral">Room warning</p>
+          <p className="font-semibold text-coral">Warning</p>
           <p className="mt-2">{leaveWarning}</p>
-        </div>
-
-        <div className="mt-8 rounded-[24px] border border-gold/35 bg-gold/10 p-5">
-          <p className="text-sm font-semibold text-gold">Planned next for this room</p>
-          <ul className="mt-3 space-y-2 text-sm text-white/78">
-            <li>Socket event flow now handles room presence, ready state, and the synced countdown</li>
-            <li>Next up: route both players into Monaco once the countdown completes</li>
-            <li>After that, the duel room can own the timer, problem panel, and live code sync</li>
-          </ul>
         </div>
       </article>
 
@@ -171,36 +166,29 @@ export function RoomShell({
               <dd className="font-medium text-white">{config.duelLanguage ?? config.devCategory}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-white/55">Room id</dt>
+              <dt className="text-white/55">Room ID</dt>
               <dd className="font-mono text-xs text-white/75">{roomId}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-white/55">Viewer role</dt>
+              <dt className="text-white/55">Your role</dt>
               <dd className="font-medium capitalize text-white">{viewerRole}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-white/55">Socket</dt>
               <dd
-                className={`font-medium capitalize ${
-                  connectionState === "connected"
+                className={
+                  "font-medium capitalize " +
+                  (connectionState === "connected"
                     ? "text-lime"
                     : connectionState === "connecting"
                       ? "text-gold"
-                      : "text-coral"
-                }`}
+                      : "text-coral")
+                }
               >
                 {connectionState}
               </dd>
             </div>
           </dl>
-        </div>
-
-        <div className="card-border rounded-[28px] border border-white/10 bg-black/20 p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">Dev mode stance</p>
-          <p className="mt-4 text-sm leading-6 text-white/72">
-            Your repo now encodes the stronger interpretation: dev mode is primarily code-repair with starter
-            projects, while theory MCQs stay as a future optional content lane for interviews or warmups.
-          </p>
         </div>
 
         <Link

@@ -1,4 +1,3 @@
-     
 export const dynamic = "force-dynamic";
 import { z } from "zod";
 import { NextResponse } from "next/server";
@@ -24,25 +23,21 @@ export async function POST(request: Request) {
   const { matchId } = result.data;
 
   try {
-    // 1. Fetch the match
     const match = await prisma.match.findUnique({ where: { id: matchId } });
     if (!match) {
       return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
 
-    // 2. Return existing problem if already generated
     const existing = await prisma.problem.findUnique({ where: { matchId } });
     if (existing) {
       return NextResponse.json({ problem: existing });
     }
 
-    // 3. Pick a random seed matching difficulty
     const difficulty = match.difficulty as "easy" | "medium" | "hard";
     const matching = problemSeeds.filter((p) => p.difficulty === difficulty);
     const pool = matching.length > 0 ? matching : problemSeeds;
     const seed = pool[Math.floor(Math.random() * pool.length)];
 
-    // 4. Persist to DB
     const problem = await prisma.problem.create({
       data: {
         mode: "competitive",

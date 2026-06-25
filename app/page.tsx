@@ -1,14 +1,25 @@
 import Link from "next/link";
 import { Header } from "@/components/header";
 import { ServerWake } from "@/components/server-wake";
+import { prisma } from "@/lib/prisma";
 
-export default function HomePage() {
+async function getMatchCount(): Promise<number> {
+  try {
+    return await prisma.match.count({ where: { status: "finished" } });
+  } catch {
+    return 0;
+  }
+}
+
+export default async function HomePage() {
+  const finishedMatches = await getMatchCount();
+  const matchDisplay = finishedMatches > 0 ? `${finishedMatches}+` : "0";
+
   return (
     <ServerWake>
       <main className="pb-24">
         <Header />
 
-        {/* ── Hero ── */}
         <section className="mx-auto mt-12 max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
             <div className="inline-flex rounded-full border border-gold/35 bg-gold/10 px-4 py-2 text-sm text-gold">
@@ -38,14 +49,13 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── Stats ── */}
         <section className="mx-auto mt-20 max-w-7xl px-6 lg:px-8">
           <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
             {[
               { value: "100+", label: "Curated problems" },
               { value: "6", label: "Languages" },
               { value: "30 min", label: "Per duel" },
-              { value: "Live", label: "Opponent view" },
+              { value: matchDisplay, label: "Duels played" },
             ].map((s) => (
               <div key={s.label} className="rounded-[20px] border border-white/10 bg-panel/60 p-6 text-center">
                 <p className="text-3xl font-semibold text-white">{s.value}</p>
@@ -55,7 +65,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── How it works ── */}
         <section id="how-it-works" className="mx-auto mt-24 max-w-7xl px-6 lg:px-8">
           <div className="mb-10 text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">How it works</p>
@@ -88,7 +97,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── Modes ── */}
         <section id="modes" className="mx-auto mt-24 max-w-7xl px-6 lg:px-8">
           <div className="mb-10 text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">Modes</p>
@@ -120,7 +128,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── CTA ── */}
         <section className="mx-auto mt-24 max-w-7xl px-6 text-center lg:px-8">
           <div className="rounded-[32px] border border-gold/20 bg-gold/8 px-8 py-16">
             <h2 className="text-4xl font-semibold text-white">Ready to duel?</h2>

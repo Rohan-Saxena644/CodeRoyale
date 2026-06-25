@@ -10,8 +10,21 @@ const submitSchema = z.object({
   matchId: z.string(),
   role: z.enum(["host", "guest"]),
   language: z.string(),
-  code: z.string(),
+  code: z.string().max(50000),
 });
+
+const submitRateLimit = new Map<string, number[]>();
+
+function checkSubmitRateLimit(key: string): boolean {
+  const now = Date.now();
+  const window = 60_000;
+  const limit = 5;
+  const timestamps = (submitRateLimit.get(key) ?? []).filter((t) => now - t < window);
+  if (timestamps.length >= limit) return false;
+  timestamps.push(now);
+  submitRateLimit.set(key, timestamps);
+  return true;
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,9 +45,6 @@ type RunOutcome = {
   isJudgeError?: boolean;
 };
 
-// Calls Judge0 directly (no internal HTTP fetch) with retry logic for
-// transient judge/infra failures. Compile errors or wrong answers from
-// the user's own code are NOT retried — only judge-side failures are.
 const RUN_RETRY_DELAYS_MS = [800, 1600];
 
 async function runOneTest(payload: RunPayload): Promise<RunOutcome> {
@@ -62,7 +72,6 @@ async function runOneTest(payload: RunPayload): Promise<RunOutcome> {
       return { actual: "", runError: `Judge error: ${error ?? "unknown"}`, isJudgeError: true };
     }
 
-    // Compile error or exception in the user's code — a real result, don't retry.
     if (!data.stdout && (data.stderr || data.compile_output)) {
       return {
         actual: "",
@@ -89,6 +98,14 @@ export async function POST(request: Request) {
 
   const { matchId, role, language, code } = result.data;
 
+  const rateLimitKey = `${matchId}:${role}`;
+  if (!checkSubmitRateLimit(rateLimitKey)) {
+    return NextResponse.json(
+      { error: "Too many submissions. Please wait before submitting again." },
+      { status: 429 }
+    );
+  }
+
   try {
     const problem = await prisma.problem.findUnique({ where: { matchId } });
     if (!problem) {
@@ -106,7 +123,6 @@ export async function POST(request: Request) {
 
     const testCases = rawJson.testCases ?? [];
 
-    // Run test cases sequentially — Judge0 CE rate-limits concurrent requests.
     const runResults: {
       input: string;
       expected: string;
@@ -120,7 +136,6 @@ export async function POST(request: Request) {
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
 
-      // Gap between requests to stay within Judge0 CE rate limits
       if (i > 0) await sleep(600);
 
       const { actual, runError, isJudgeError } = await runOneTest({

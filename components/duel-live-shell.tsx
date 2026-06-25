@@ -7,8 +7,6 @@ import { io, type Socket } from "socket.io-client";
 import Editor from "@monaco-editor/react";
 import type { MatchConfig } from "@/lib/types";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 type DuelLiveShellProps = {
   roomId: string;
   inviteCode: string;
@@ -66,9 +64,20 @@ type EmoteToast = {
   fromRole: "host" | "guest";
 };
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+const EMOTES = ["👏", "💀", "🔥", "😤", "🤝", "🎯", "⚡", "🧠", "💪", "🤖"];
 
-const EMOTES = ["👏", "💀", "🔥", "😤", "🤝"];
+const EMOTE_LABELS: Record<string, string> = {
+  "👏": "gg",
+  "💀": "rekt",
+  "🔥": "fire",
+  "😤": "try",
+  "🤝": "peace",
+  "🎯": "focus",
+  "⚡": "speed",
+  "🧠": "big brain",
+  "💪": "grind",
+  "🤖": "bot",
+};
 
 const starterTemplates: Record<string, string> = {
   javascript: `// Waiting for problem...\n`,
@@ -79,8 +88,6 @@ const starterTemplates: Record<string, string> = {
   java:       `// Waiting for problem...\n`,
   default:    `// Waiting for problem...\n`,
 };
-
-// ─── Type maps ───────────────────────────────────────────────────────────────
 
 const GO_TYPES: Record<string, string> = {
   "number": "int", "number[]": "[]int",
@@ -101,8 +108,6 @@ const JAVA_ZERO: Record<string, string> = {
   "number": "0", "boolean": "false", "string": '""',
   "number[]": "null", "string[]": "null",
 };
-
-// ─── Stub builder (pure function — no closures, no template nesting) ─────────
 
 function buildStub(
   lang: string,
@@ -141,8 +146,6 @@ function buildStub(
   return "function " + name + "(" + simpleParams + ") {\n  // your solution here\n}\n";
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function getSocketUrl(): string {
   return process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
 }
@@ -151,8 +154,6 @@ function getEditorLanguage(config: MatchConfig): string {
   if (config.mode === "competitive") return config.duelLanguage ?? "javascript";
   return "javascript";
 }
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 export function DuelLiveShell({
   roomId,
@@ -166,6 +167,7 @@ export function DuelLiveShell({
   const socketRef       = useRef<Socket | null>(null);
   const syncTimeoutRef  = useRef<number | null>(null);
   const emoteCounterRef = useRef(0);
+  const lastEmoteRef    = useRef(0);
 
   const editorLanguage = getEditorLanguage(config);
   const starterCode    = starterTemplates[editorLanguage] ?? starterTemplates.default;
@@ -181,24 +183,28 @@ export function DuelLiveShell({
   const [matchResult,     setMatchResult]     = useState<MatchResult | null>(null);
   const [emoteToasts,     setEmoteToasts]     = useState<EmoteToast[]>([]);
   const [opponentLeft,    setOpponentLeft]    = useState<string | null>(null);
+  const [emoteCooldown,   setEmoteCooldown]   = useState(false);
 
   const selfHandle     = useMemo(() => viewerRole === "host" ? hostName : guestName ?? "Guest", [guestName, hostName, viewerRole]);
   const myHandle       = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
   const opponentHandle = viewerRoleState === "host" ? (guestName ?? "Opponent") : hostName;
 
-  // ── Emotes ───────────────────────────────────────────────────────────────────
   const addEmoteToast = useCallback((emote: string, fromRole: "host" | "guest") => {
     const id = ++emoteCounterRef.current;
     setEmoteToasts((prev) => [...prev, { id, emote, fromRole }]);
-    setTimeout(() => setEmoteToasts((prev) => prev.filter((t) => t.id !== id)), 2500);
+    setTimeout(() => setEmoteToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
   }, []);
 
   function sendEmote(emote: string) {
+    const now = Date.now();
+    if (now - lastEmoteRef.current < 1500) return;
+    lastEmoteRef.current = now;
+    setEmoteCooldown(true);
+    setTimeout(() => setEmoteCooldown(false), 1500);
     socketRef.current?.emit("emote:send", { roomId, emote, fromRole: viewerRoleState });
     addEmoteToast(emote, viewerRoleState);
   }
 
-  // ── Code sync ────────────────────────────────────────────────────────────────
   function emitCode(code: string) {
     socketRef.current?.emit("code:sync", { roomId, inviteCode, role: viewerRoleState, code });
   }
@@ -207,7 +213,7 @@ export function DuelLiveShell({
     const next = nextValue ?? "";
     setMyCode(next);
     if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
-    syncTimeoutRef.current = window.setTimeout(() => emitCode(next), 90);
+    syncTimeoutRef.current = window.setTimeout(() => emitCode(next), 120);
   }
 
   function handleLeaveDuel() {
@@ -216,9 +222,12 @@ export function DuelLiveShell({
     socket.emit("room:leave", () => router.push("/match" as Route));
   }
 
-  // ── Socket setup ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const socket: Socket = io(getSocketUrl(), { transports: ["websocket"] });
+    const socket: Socket = io(getSocketUrl(), {
+      transports: ["websocket"],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
     socketRef.current = socket;
 
     socket.on("connect", () => {
@@ -228,6 +237,7 @@ export function DuelLiveShell({
     });
 
     socket.on("disconnect", () => setConnectionState("disconnected"));
+    socket.on("connect_error", () => setConnectionState("disconnected"));
 
     socket.on("room:role-updated", (nextRole: "host" | "guest") => {
       setViewerRoleState(nextRole);
@@ -264,7 +274,6 @@ export function DuelLiveShell({
     });
 
     socket.on("player:left", (payload: { name: string; role: "host" | "guest" }) => {
-      // Only show banner if it's the opponent who left, not ourselves
       if (payload.role !== viewerRoleState) {
         setOpponentLeft(payload.name);
       }
@@ -282,7 +291,6 @@ export function DuelLiveShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inviteCode, roomId]);
 
-  // ── Countdown timer ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!problem) return;
     const interval = setInterval(() => {
@@ -298,7 +306,6 @@ export function DuelLiveShell({
     return () => clearInterval(interval);
   }, [problem, roomId, viewerRoleState]);
 
-  // ── Submit ────────────────────────────────────────────────────────────────────
   async function handleSubmit() {
     setSubmitting(true);
     try {
@@ -316,11 +323,12 @@ export function DuelLiveShell({
     }
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  const timeIsLow = timeLeft <= 60;
+  const timeDisplay = `${String(Math.floor(timeLeft / 60)).padStart(2, "0")}:${String(timeLeft % 60).padStart(2, "0")}`;
+
   return (
     <main className="relative pb-16">
 
-      {/* ── Opponent left banner ── */}
       {opponentLeft && (
         <div className="sticky top-0 z-40 flex items-center justify-between gap-4 bg-coral/90 px-6 py-3 backdrop-blur-sm">
           <p className="text-sm font-semibold text-white">
@@ -336,25 +344,29 @@ export function DuelLiveShell({
         </div>
       )}
 
-      {/* ── Win/Loss Overlay ── */}
       {matchResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
           <div className={[
-            "flex flex-col items-center gap-6 rounded-3xl border px-12 py-10 text-center shadow-2xl",
+            "relative flex flex-col items-center gap-5 rounded-3xl border px-14 py-12 text-center shadow-2xl",
             matchResult.isDraw  ? "border-white/20 bg-[#111111]" :
-            matchResult.iWon    ? "border-lime/40 bg-[#0a1a0a]"  :
-                                  "border-red-500/30 bg-[#1a0a0a]",
+            matchResult.iWon    ? "border-lime/40 bg-[#070f07]"  :
+                                  "border-red-500/30 bg-[#100707]",
           ].join(" ")}>
-            <div className="text-7xl">
+            {matchResult.iWon && !matchResult.isDraw && (
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
+                <div className="absolute left-1/2 top-0 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime/20 blur-[80px]" />
+              </div>
+            )}
+            <div className="relative text-8xl">
               {matchResult.isDraw ? "🤝" : matchResult.iWon ? "🏆" : "💀"}
             </div>
             <h1 className={[
-              "text-4xl font-black tracking-tight",
+              "relative text-5xl font-black tracking-tight",
               matchResult.isDraw ? "text-white/80" : matchResult.iWon ? "text-lime" : "text-red-400",
             ].join(" ")}>
               {matchResult.isDraw ? "Draw!" : matchResult.iWon ? "Victory!" : "Defeated"}
             </h1>
-            <p className="text-sm text-white/50">
+            <p className="relative text-sm text-white/50 max-w-xs leading-6">
               {matchResult.isDraw
                 ? (matchResult.reason === "timeout" ? "Time's up — both players tied on score" : "Both players tied")
                 : matchResult.iWon
@@ -363,24 +375,32 @@ export function DuelLiveShell({
                     ? "Time's up — " + (matchResult.winnerRole === "host" ? hostName : guestName ?? "Opponent") + " had the higher score"
                     : (matchResult.winnerRole === "host" ? hostName : guestName ?? "Opponent") + " solved it first")}
             </p>
-            <button
-              type="button"
-              onClick={() => router.push("/match" as Route)}
-              className="mt-2 rounded-full border border-white/20 bg-white/10 px-8 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-            >
-              Back to Lobby
-            </button>
+            <div className="relative mt-2 flex gap-3">
+              <button
+                type="button"
+                onClick={() => router.push("/match" as Route)}
+                className="rounded-full bg-white px-8 py-2.5 text-sm font-semibold text-ink transition hover:scale-[1.02]"
+              >
+                Back to Lobby
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatchResult(null)}
+                className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
+              >
+                View code
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Emote toasts ── */}
       <div className="pointer-events-none fixed bottom-8 right-6 z-40 flex flex-col items-end gap-2">
         {emoteToasts.map((t) => (
           <div
             key={t.id}
             className={[
-              "animate-bounce rounded-2xl border px-4 py-2 text-2xl shadow-lg transition",
+              "animate-bounce rounded-2xl border px-4 py-2 text-2xl shadow-lg",
               t.fromRole === viewerRoleState ? "border-lime/30 bg-lime/10" : "border-white/20 bg-white/10",
             ].join(" ")}
           >
@@ -394,7 +414,6 @@ export function DuelLiveShell({
 
       <section className="mx-auto mt-6 max-w-[1600px] px-4 lg:px-6">
 
-        {/* ── Top bar ── */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {[config.mode, config.duelLanguage ?? config.devCategory, config.difficulty].map((label) => (
@@ -404,10 +423,21 @@ export function DuelLiveShell({
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-1">
+            <div className={[
+              "flex items-center gap-1 rounded-full border px-2 py-1 transition-opacity",
+              emoteCooldown ? "opacity-50 pointer-events-none" : "opacity-100",
+              "border-white/10 bg-black/20",
+            ].join(" ")}>
               {EMOTES.map((e) => (
-                <button key={e} type="button" onClick={() => sendEmote(e)}
-                  className="rounded-full px-1.5 py-0.5 text-base transition hover:bg-white/10 active:scale-125">{e}</button>
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => sendEmote(e)}
+                  title={EMOTE_LABELS[e]}
+                  className="rounded-full px-1.5 py-0.5 text-base transition hover:bg-white/10 active:scale-125"
+                >
+                  {e}
+                </button>
               ))}
             </div>
             <span className={[
@@ -423,7 +453,6 @@ export function DuelLiveShell({
           </div>
         </div>
 
-        {/* ── Problem panel ── */}
         <div className="mb-4 max-h-[380px] overflow-y-auto rounded-[20px] border border-white/10 bg-panel/92 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex-1">
@@ -455,10 +484,14 @@ export function DuelLiveShell({
                 <span className="ml-2 font-semibold text-white">{guestName ?? "—"}</span>
               </div>
               <div className={[
-                "rounded-2xl border px-4 py-2 font-semibold",
-                timeLeft <= 60 ? "border-red-500/30 bg-red-500/10 text-red-400" : "border-gold/30 bg-gold/10 text-gold",
+                "rounded-2xl border px-4 py-2 font-semibold tabular-nums",
+                timeIsLow
+                  ? "border-red-500/50 bg-red-500/15 text-red-400 animate-pulse"
+                  : timeLeft <= 300
+                  ? "border-gold/40 bg-gold/10 text-gold"
+                  : "border-white/10 bg-black/20 text-white/70",
               ].join(" ")}>
-                {String(Math.floor(timeLeft / 60)).padStart(2, "0")}:{String(timeLeft % 60).padStart(2, "0")}
+                {timeDisplay}
               </div>
             </div>
           </div>
@@ -467,14 +500,13 @@ export function DuelLiveShell({
               <p className="text-white/50">Example {i + 1}</p>
               <p className="mt-1 text-white">Input: <code>{JSON.stringify(ex.args)}</code></p>
               <p className="text-white">Output: <code>{JSON.stringify(ex.output)}</code></p>
+              {ex.explanation && <p className="mt-1 text-white/40">{ex.explanation}</p>}
             </div>
           ))}
         </div>
 
-        {/* ── Side-by-side editors ── */}
         <div className="grid gap-4 lg:grid-cols-2">
 
-          {/* Your editor */}
           <div className="rounded-[20px] border border-lime/25 bg-panel/92 p-4">
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
               <div>
@@ -484,12 +516,53 @@ export function DuelLiveShell({
               <span className="rounded-full border border-lime/30 bg-lime/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime">writable</span>
             </div>
             <div className="overflow-hidden rounded-[14px] border border-white/10">
-              <Editor height="520px" language={editorLanguage} theme="vs-dark" value={myCode} onChange={handleCodeChange}
-                options={{ minimap: { enabled: false }, fontSize: 14, wordWrap: "on", automaticLayout: true, scrollBeyondLastLine: false, padding: { top: 12, bottom: 12 } }} />
+              <Editor
+                height="520px"
+                language={editorLanguage}
+                theme="vs-dark"
+                value={myCode}
+                onChange={handleCodeChange}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  wordWrap: "on",
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  padding: { top: 12, bottom: 12 },
+                  contextmenu: false,
+                }}
+                onMount={(editor) => {
+                  editor.onKeyDown((e) => {
+                    const isCopyPaste =
+                      (e.ctrlKey || e.metaKey) &&
+                      (e.code === "KeyV" || e.code === "KeyC" || e.code === "KeyX");
+                    if (isCopyPaste) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  });
+                  editor.getDomNode()?.addEventListener("paste", (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                  });
+                  editor.getDomNode()?.addEventListener("copy", (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                  });
+                  editor.getDomNode()?.addEventListener("cut", (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                  });
+                }}
+              />
             </div>
             <div className="mt-3 flex items-center gap-3">
-              <button type="button" onClick={handleSubmit} disabled={submitting || !!matchResult}
-                className="rounded-full border border-lime/40 bg-lime/15 px-5 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime transition hover:bg-lime/25 disabled:opacity-50">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={submitting || !!matchResult}
+                className="rounded-full border border-lime/40 bg-lime/15 px-5 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime transition hover:bg-lime/25 disabled:opacity-50"
+              >
                 {submitting ? "Running..." : "Submit"}
               </button>
               {verdict && (
@@ -505,12 +578,12 @@ export function DuelLiveShell({
                 </div>
               )}
             </div>
-            {verdict && verdict.hasJudgeErrors && (
+            {verdict?.hasJudgeErrors && (
               <p className="mt-2 rounded-xl border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold">
-                The grading service had trouble running one or more tests (often a temporary rate limit on the free judge). This may not be a problem with your code — wait a few seconds and submit again.
+                The grading service had trouble running one or more tests — this is likely a temporary issue. Wait a few seconds and try again.
               </p>
             )}
-            {verdict && verdict.results && verdict.results.length > 0 && (
+            {verdict?.results && verdict.results.length > 0 && (
               <div className="mt-2 space-y-1.5">
                 {verdict.results.map((r, i) => (
                   <div key={i} className={[
@@ -538,7 +611,6 @@ export function DuelLiveShell({
             )}
           </div>
 
-          {/* Opponent editor */}
           <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
               <div>
@@ -548,8 +620,22 @@ export function DuelLiveShell({
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-white/45">read only</span>
             </div>
             <div className="overflow-hidden rounded-[14px] border border-white/10">
-              <Editor height="520px" language={editorLanguage} theme="vs-dark" value={opponentCode}
-                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 14, wordWrap: "on", automaticLayout: true, scrollBeyondLastLine: false, padding: { top: 12, bottom: 12 } }} />
+              <Editor
+                height="520px"
+                language={editorLanguage}
+                theme="vs-dark"
+                value={opponentCode}
+                options={{
+                  readOnly: true,
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  wordWrap: "on",
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  padding: { top: 12, bottom: 12 },
+                  contextmenu: false,
+                }}
+              />
             </div>
           </div>
 

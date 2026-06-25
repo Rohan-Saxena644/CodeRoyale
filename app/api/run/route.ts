@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 const runSchema = z.object({
   language: z.string(),
-  code: z.string(),
+  code: z.string().max(50000),
   functionName: z.string(),
   args: z.array(z.unknown()),
   params: z
@@ -15,7 +15,32 @@ const runSchema = z.object({
     .optional(),
 });
 
+const runRateLimit = new Map<string, number[]>();
+
+function getIp(request: Request): string {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+}
+
+function checkRunRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const window = 60_000;
+  const limit = 20;
+  const timestamps = (runRateLimit.get(ip) ?? []).filter((t) => now - t < window);
+  if (timestamps.length >= limit) return false;
+  timestamps.push(now);
+  runRateLimit.set(ip, timestamps);
+  return true;
+}
+
 export async function POST(request: Request) {
+  const ip = getIp(request);
+  if (!checkRunRateLimit(ip)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429 }
+    );
+  }
+
   const payload = await request.json();
   const result = runSchema.safeParse(payload);
 
@@ -53,13 +78,6 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
-
-  console.log(
-    "[run] judge0 status:",
-    data.status?.description,
-    "| stderr:",
-    (data.stderr ?? "").slice(0, 200)
-  );
 
   return NextResponse.json({
     stdout: data.stdout ?? "",
