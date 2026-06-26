@@ -9,9 +9,9 @@ const matchSchema = z.object({
   config: z.object({
     mode: z.enum(["competitive", "dev"]),
     difficulty: z.enum(["easy", "medium", "hard"]),
-    duelLanguage: z.enum(["python", "javascript", "cpp", "go", "rust","java"]).optional(),
-    devCategory: z.enum(["react-ui", "express-api", "go-backend", "rust-backend", "next-actions"]).optional()
-  })
+    duelLanguage: z.enum(["python", "javascript", "cpp", "go", "rust", "java"]).optional(),
+    devCategory: z.enum(["react-ui", "express-api", "go-backend", "rust-backend", "next-actions"]).optional(),
+  }),
 });
 
 const matchCreateLimit = new Map<string, number[]>();
@@ -44,13 +44,7 @@ export async function POST(request: Request) {
   const result = matchSchema.safeParse(payload);
 
   if (!result.success) {
-    return NextResponse.json(
-      {
-        error: "Invalid room payload",
-        issues: result.error.flatten()
-      },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid room payload" }, { status: 400 });
   }
 
   try {
@@ -64,15 +58,8 @@ export async function POST(request: Request) {
       result.data.hostName
     )}&mode=${result.data.config.mode}&difficulty=${result.data.config.difficulty}&track=${track}&role=host`;
 
-    return NextResponse.json({
-      match,
-      roomUrl
-    });
-  } catch(err) {
-    console.error("[api/match] error:", err);
-    return NextResponse.json(
-      { error: "Failed to create match", detail: String(err) },
-      { status: 500 }
-    );
+    return NextResponse.json({ match, roomUrl });
+  } catch {
+    return NextResponse.json({ error: "Failed to create match" }, { status: 500 });
   }
 }

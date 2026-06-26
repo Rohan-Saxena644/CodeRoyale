@@ -7,10 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { buildDriver, languageIds, runOnJudge0 } from "@/lib/judge";
 
 const submitSchema = z.object({
-  matchId: z.string(),
+  matchId: z.string().min(1).max(64),
   role: z.enum(["host", "guest"]),
-  language: z.string(),
-  code: z.string().max(50000),
+  language: z.enum(["javascript", "python", "cpp", "go", "rust", "java"]),
+  code: z.string().min(1).max(50000),
 });
 
 const submitRateLimit = new Map<string, number[]>();
@@ -90,10 +90,7 @@ export async function POST(request: Request) {
   const result = submitSchema.safeParse(payload);
 
   if (!result.success) {
-    return NextResponse.json(
-      { error: "Invalid submit payload", issues: result.error.flatten() },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid submit payload" }, { status: 400 });
   }
 
   const { matchId, role, language, code } = result.data;
@@ -107,6 +104,23 @@ export async function POST(request: Request) {
   }
 
   try {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: { status: true, hostName: true, guestName: true, winnerRole: true },
+    });
+
+    if (!match) {
+      return NextResponse.json({ error: "Match not found" }, { status: 404 });
+    }
+
+    if (match.status === "finished") {
+      return NextResponse.json({ error: "Match has already ended" }, { status: 409 });
+    }
+
+    if (match.winnerRole) {
+      return NextResponse.json({ error: "Match has already ended" }, { status: 409 });
+    }
+
     const problem = await prisma.problem.findUnique({ where: { matchId } });
     if (!problem) {
       return NextResponse.json({ error: "Problem not found" }, { status: 404 });
@@ -135,7 +149,6 @@ export async function POST(request: Request) {
 
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
-
       if (i > 0) await sleep(600);
 
       const { actual, runError, isJudgeError } = await runOneTest({
@@ -196,10 +209,15 @@ export async function POST(request: Request) {
           process.env.NEXT_PUBLIC_SOCKET_URL ??
           "http://localhost:4000";
 
+        const secret = process.env.INTERNAL_SECRET ?? "";
+
         try {
           await fetch(`${socketUrl}/internal/match-ended`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(secret ? { "x-internal-secret": secret } : {}),
+            },
             body: JSON.stringify({ roomId: matchId, winnerRole: role }),
           });
         } catch (err) {
@@ -218,9 +236,6 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("[submit] error:", err);
-    return NextResponse.json(
-      { error: "Submission failed", detail: String(err) },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Submission failed" }, { status: 500 });
   }
 }

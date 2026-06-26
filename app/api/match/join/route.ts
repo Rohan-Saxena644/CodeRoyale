@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 const joinSchema = z.object({
   inviteCode: z.string().trim().min(4).max(12),
-  guestName: z.string().trim().min(2).max(32)
+  guestName: z.string().trim().min(2).max(32),
 });
 
 const joinRateLimit = new Map<string, number[]>();
@@ -53,22 +53,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "That room already has a guest joined." }, { status: 409 });
   }
 
-  const updatedMatch = await updateStoredMatchGuest(inviteCode, result.data.guestName);
+  try {
+    const updatedMatch = await updateStoredMatchGuest(inviteCode, result.data.guestName);
+    const track =
+      updatedMatch.config.mode === "competitive"
+        ? (updatedMatch.config.duelLanguage ?? "javascript")
+        : (updatedMatch.config.devCategory ?? "react-ui");
+    const guestName = updatedMatch.guestName ?? result.data.guestName;
 
-  const track =
-    updatedMatch.config.mode === "competitive"
-      ? (updatedMatch.config.duelLanguage ?? "javascript")
-      : (updatedMatch.config.devCategory ?? "react-ui");
-  const guestName = updatedMatch.guestName ?? result.data.guestName;
+    const roomUrl = `/room/${updatedMatch.id}?invite=${updatedMatch.inviteCode}&host=${encodeURIComponent(
+      updatedMatch.hostName
+    )}&guest=${encodeURIComponent(guestName)}&mode=${updatedMatch.config.mode}&difficulty=${
+      updatedMatch.config.difficulty
+    }&track=${track}&role=guest`;
 
-  const roomUrl = `/room/${updatedMatch.id}?invite=${updatedMatch.inviteCode}&host=${encodeURIComponent(
-    updatedMatch.hostName
-  )}&guest=${encodeURIComponent(guestName)}&mode=${updatedMatch.config.mode}&difficulty=${
-    updatedMatch.config.difficulty
-  }&track=${track}&role=guest`;
-
-  return NextResponse.json({
-    match: updatedMatch,
-    roomUrl
-  });
+    return NextResponse.json({ match: updatedMatch, roomUrl });
+  } catch {
+    return NextResponse.json({ error: "Failed to join match" }, { status: 500 });
+  }
 }
