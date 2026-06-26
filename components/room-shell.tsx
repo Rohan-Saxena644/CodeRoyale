@@ -101,7 +101,7 @@ export function RoomShell({
             <div>
               <p className="font-semibold text-gold">Get ready!</p>
               <p className="mt-0.5 text-sm text-white/60">
-                The duel workspace is loading. You'll be taken there automatically.
+                The duel workspace is loading. You&apos;ll be taken there automatically.
               </p>
             </div>
           </div>
@@ -145,7 +145,7 @@ export function RoomShell({
                 ? viewerReady
                   ? matchStatus === "countdown"
                     ? "Countdown is live. You can still unready to cancel the start."
-                    : "You're locked in. Click Unready to change your mind."
+                    : "You&apos;re locked in. Click Unready to change your mind."
                   : matchStatus === "countdown"
                     ? "If either player unreadies during countdown, the room resets."
                     : "Both players are here. Mark yourself ready to start the countdown."
