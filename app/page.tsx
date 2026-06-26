@@ -17,31 +17,37 @@ export default async function HomePage() {
 
   return (
     <ServerWake>
-      <main className="pb-24">
+      <main className="overflow-x-hidden pb-24">
         <Header />
 
-        <section className="mx-auto mt-12 max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="inline-flex rounded-full border border-gold/35 bg-gold/10 px-4 py-2 text-sm text-gold">
+        {/* ── Hero ── */}
+        <section className="relative mx-auto mt-10 max-w-7xl px-6 lg:px-8">
+          <div className="pointer-events-none absolute inset-0 flex justify-center">
+            <div className="h-[480px] w-[700px] rounded-full bg-gold/5 blur-[120px]" />
+          </div>
+          <div className="relative mx-auto max-w-3xl text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-gold/35 bg-gold/10 px-4 py-2 text-sm font-medium text-gold">
+              <span className="h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
               Real-time 1v1 competitive coding duels
             </div>
             <h1 className="mt-6 text-5xl font-semibold tracking-tight text-white md:text-7xl">
-              Code faster than your opponent. Win the duel.
+              Code faster.<br />
+              <span className="text-gold">Win the duel.</span>
             </h1>
-            <p className="mt-6 text-lg leading-8 text-white/65">
-              CodeRoyale puts two developers head-to-head on the same problem. Write your solution, watch your
-              opponent type live, and be the first to pass all test cases.
+            <p className="mt-6 text-lg leading-8 text-white/60">
+              Two developers. One problem. First to pass all test cases wins.
+              Watch your opponent's code evolve in real time.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-4">
               <Link
                 href="/match"
-                className="rounded-full bg-white px-8 py-3.5 font-semibold text-ink transition hover:scale-[1.02]"
+                className="rounded-full bg-white px-8 py-3.5 font-semibold text-ink shadow-[0_0_32px_rgba(255,246,228,0.12)] transition hover:scale-[1.02] hover:shadow-[0_0_48px_rgba(255,246,228,0.18)]"
               >
-                Start a duel
+                Start a duel →
               </Link>
               <a
                 href="#how-it-works"
-                className="rounded-full border border-white/15 px-8 py-3.5 font-semibold text-white/80 transition hover:border-white/30"
+                className="rounded-full border border-white/15 px-8 py-3.5 font-semibold text-white/75 transition hover:border-white/30 hover:text-white"
               >
                 How it works
               </a>
@@ -49,95 +55,145 @@ export default async function HomePage() {
           </div>
         </section>
 
+        {/* ── Stats ── */}
         <section className="mx-auto mt-20 max-w-7xl px-6 lg:px-8">
-          <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
-              { value: "100+", label: "Curated problems" },
-              { value: "6", label: "Languages" },
-              { value: "30 min", label: "Per duel" },
-              { value: matchDisplay, label: "Duels played" },
+              { value: "100+", label: "Curated problems", icon: "📚" },
+              { value: "6",    label: "Languages",        icon: "⚙️" },
+              { value: "30m",  label: "Per duel",         icon: "⏱️" },
+              { value: matchDisplay, label: "Duels played", icon: "⚔️" },
             ].map((s) => (
-              <div key={s.label} className="rounded-[20px] border border-white/10 bg-panel/60 p-6 text-center">
+              <div
+                key={s.label}
+                className="flex flex-col items-center gap-2 rounded-[20px] border border-white/10 bg-panel/60 p-6 text-center"
+              >
+                <span className="text-2xl">{s.icon}</span>
                 <p className="text-3xl font-semibold text-white">{s.value}</p>
-                <p className="mt-1 text-sm text-white/50">{s.label}</p>
+                <p className="text-xs text-white/45 uppercase tracking-[0.16em]">{s.label}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section id="how-it-works" className="mx-auto mt-24 max-w-7xl px-6 lg:px-8">
-          <div className="mb-10 text-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">How it works</p>
+        {/* ── How it works ── */}
+        <section id="how-it-works" className="mx-auto mt-28 max-w-7xl px-6 lg:px-8">
+          <div className="mb-12 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-gold">How it works</p>
             <h2 className="mt-3 text-3xl font-semibold text-white">From room to verdict in minutes</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
             {[
               {
                 step: "01",
+                icon: "🏠",
                 title: "Create a room",
                 desc: "Pick your language, difficulty, and share the invite code with your opponent.",
               },
               {
                 step: "02",
+                icon: "💻",
                 title: "Solve the problem",
                 desc: "Both players get the same problem. Write your function — see your opponent's code update live.",
               },
               {
                 step: "03",
+                icon: "🏆",
                 title: "First to AC wins",
                 desc: "Hit Submit. Your code runs against all test cases. Pass them all first and win the duel.",
               },
-            ].map((item) => (
-              <div key={item.step} className="rounded-[24px] border border-white/10 bg-panel/60 p-7">
-                <span className="text-4xl font-semibold text-gold/30">{item.step}</span>
-                <h3 className="mt-4 text-lg font-semibold text-white">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-white/55">{item.desc}</p>
+            ].map((item, i) => (
+              <div key={item.step} className="relative rounded-[24px] border border-white/10 bg-panel/60 p-7">
+                {i < 2 && (
+                  <div className="absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 rounded-full border border-white/10 bg-ink px-2 py-1 text-xs text-white/30 md:block">
+                    →
+                  </div>
+                )}
+                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/30 text-lg">
+                  {item.icon}
+                </div>
+                <span className="block text-4xl font-semibold text-gold/20">{item.step}</span>
+                <h3 className="mt-2 text-lg font-semibold text-white">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-white/50">{item.desc}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section id="modes" className="mx-auto mt-24 max-w-7xl px-6 lg:px-8">
-          <div className="mb-10 text-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">Modes</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white">Competitive mode</h2>
+        {/* ── Languages ── */}
+        <section id="modes" className="mx-auto mt-28 max-w-7xl px-6 lg:px-8">
+          <div className="mb-12 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-gold">Supported</p>
+            <h2 className="mt-3 text-3xl font-semibold text-white">Pick your weapon</h2>
           </div>
-          <div className="mx-auto max-w-2xl rounded-[28px] border border-white/10 bg-panel/60 p-8">
-            <div className="flex items-start gap-5">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-gold/30 bg-gold/10 text-xl">
-                ⚔️
-              </span>
-              <div>
-                <h3 className="text-xl font-semibold text-white">Algorithm Duel</h3>
-                <p className="mt-2 text-sm leading-6 text-white/60">
-                  Both players receive the same algorithm problem — arrays, strings, dynamic programming, graphs and
-                  more. Write a function that passes all test cases before your opponent does.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {["JavaScript", "Python", "C++", "Go", "Rust", "Java"].map((lang) => (
-                    <span
-                      key={lang}
-                      className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-semibold text-white/60"
-                    >
-                      {lang}
-                    </span>
-                  ))}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { lang: "JavaScript", icon: "🟨", desc: "V8-powered, runs every time" },
+              { lang: "Python",     icon: "🐍", desc: "CPython 3, batteries included" },
+              { lang: "C++",        icon: "⚡", desc: "Raw speed, full STL" },
+              { lang: "Go",         icon: "🔵", desc: "Fast compile, clean output" },
+              { lang: "Rust",       icon: "🦀", desc: "Memory-safe, zero overhead" },
+              { lang: "Java",       icon: "☕", desc: "JVM classic, full stdlib" },
+            ].map((item) => (
+              <div
+                key={item.lang}
+                className="flex items-center gap-4 rounded-[20px] border border-white/10 bg-panel/60 p-5 transition hover:border-white/20"
+              >
+                <span className="text-3xl">{item.icon}</span>
+                <div>
+                  <p className="font-semibold text-white">{item.lang}</p>
+                  <p className="mt-0.5 text-xs text-white/45">{item.desc}</p>
                 </div>
               </div>
-            </div>
+            ))}
           </div>
         </section>
 
-        <section className="mx-auto mt-24 max-w-7xl px-6 text-center lg:px-8">
-          <div className="rounded-[32px] border border-gold/20 bg-gold/8 px-8 py-16">
-            <h2 className="text-4xl font-semibold text-white">Ready to duel?</h2>
-            <p className="mt-4 text-white/60">Create a room, send the invite code, and start coding.</p>
-            <Link
-              href="/match"
-              className="mt-8 inline-block rounded-full bg-white px-8 py-3.5 font-semibold text-ink transition hover:scale-[1.02]"
-            >
-              Start a duel
-            </Link>
+        {/* ── CTA ── */}
+        <section className="mx-auto mt-28 max-w-7xl px-6 lg:px-8">
+          <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-panel/80 px-8 py-20 text-center">
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute left-1/4 top-0 h-64 w-64 -translate-y-1/2 rounded-full bg-gold/8 blur-[80px]" />
+              <div className="absolute right-1/4 bottom-0 h-64 w-64 translate-y-1/2 rounded-full bg-gold/6 blur-[80px]" />
+              <div className="absolute inset-0 opacity-[0.03]"
+                style={{
+                  backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)",
+                  backgroundSize: "32px 32px",
+                }} />
+            </div>
+            <div className="relative">
+              <div className="mx-auto mb-6 inline-flex h-16 w-16 items-center justify-center rounded-3xl border border-gold/30 bg-gold/12 text-3xl">
+                ⚔️
+              </div>
+              <h2 className="text-4xl font-semibold text-white md:text-5xl">
+                Ready to prove<br />
+                <span className="text-gold">you're the fastest?</span>
+              </h2>
+              <p className="mx-auto mt-5 max-w-md text-base text-white/55">
+                Create a room, send your opponent the invite code, and start coding.
+                The better dev wins.
+              </p>
+              <div className="mt-10 flex flex-wrap justify-center gap-4">
+                <Link
+                  href="/match"
+                  className="rounded-full bg-gold px-10 py-4 text-base font-semibold text-ink shadow-[0_0_40px_rgba(255,200,60,0.25)] transition hover:scale-[1.02] hover:shadow-[0_0_60px_rgba(255,200,60,0.35)]"
+                >
+                  Start a duel →
+                </Link>
+                <a
+                  href="#how-it-works"
+                  className="rounded-full border border-white/15 px-10 py-4 text-base font-semibold text-white/70 transition hover:border-white/30 hover:text-white"
+                >
+                  See how it works
+                </a>
+              </div>
+              <div className="mt-10 flex flex-wrap justify-center gap-6 text-xs text-white/30">
+                <span>✓ No sign-up required</span>
+                <span>✓ Free to use</span>
+                <span>✓ 6 languages supported</span>
+                <span>✓ 100+ problems</span>
+              </div>
+            </div>
           </div>
         </section>
       </main>
