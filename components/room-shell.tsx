@@ -32,11 +32,15 @@ export function RoomShell({
   connectionState = "disconnected",
   onReadyToggle,
   onLeaveRoom,
-  isReadyPending = false
+  isReadyPending = false,
 }: RoomShellProps) {
+  const safeCountdown = countdownLeft != null && countdownLeft > 0 ? countdownLeft : null;
+
   const roomHeadline =
     matchStatus === "countdown"
-      ? countdownLeft != null ? "Match starts in " + countdownLeft + "s" : "Match starting…"
+      ? safeCountdown != null
+        ? `Match starts in ${safeCountdown}s`
+        : "Match starting…"
       : matchStatus === "active"
         ? "Duel is ready to begin"
         : guestName
@@ -75,12 +79,40 @@ export function RoomShell({
           </div>
         </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
+        {matchStatus === "countdown" && safeCountdown != null && (
+          <div className="mt-6 flex items-center gap-4 rounded-[20px] border border-gold/30 bg-gold/8 px-5 py-4">
+            <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center">
+              <svg className="absolute inset-0 -rotate-90" viewBox="0 0 56 56" fill="none">
+                <circle cx="28" cy="28" r="24" stroke="rgba(255,200,60,0.15)" strokeWidth="4" />
+                <circle
+                  cx="28"
+                  cy="28"
+                  r="24"
+                  stroke="#ffc83c"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={`${2 * Math.PI * 24}`}
+                  strokeDashoffset={`${2 * Math.PI * 24 * (1 - safeCountdown / 5)}`}
+                  style={{ transition: "stroke-dashoffset 0.25s linear" }}
+                />
+              </svg>
+              <span className="text-xl font-black tabular-nums text-gold">{safeCountdown}</span>
+            </div>
+            <div>
+              <p className="font-semibold text-gold">Get ready!</p>
+              <p className="mt-0.5 text-sm text-white/60">
+                The duel workspace is loading. You'll be taken there automatically.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-3xl border border-white/10 bg-black/15 p-5">
             <p className="text-xs uppercase tracking-[0.18em] text-white/45">Host</p>
             <p className="mt-2 text-lg font-semibold text-white">{hostName}</p>
-            <p className="mt-2 text-sm text-lime">
-              {hostReady ? "Ready" : viewerRole === "host" ? "You created this room" : "Host joined"}
+            <p className={`mt-2 text-sm ${hostReady ? "text-lime" : "text-white/45"}`}>
+              {hostReady ? "✓ Ready" : viewerRole === "host" ? "You created this room" : "Host joined"}
             </p>
           </div>
           <div
@@ -93,14 +125,14 @@ export function RoomShell({
           >
             <p className="text-xs uppercase tracking-[0.18em] text-white/45">Opponent</p>
             <p className="mt-2 text-lg font-semibold text-white/72">{guestName ?? "Open slot"}</p>
-            <p className="mt-2 text-sm text-white/45">
+            <p className={`mt-2 text-sm ${guestReady ? "text-lime" : "text-white/45"}`}>
               {guestName
                 ? guestReady
-                  ? "Ready"
+                  ? "✓ Ready"
                   : viewerRole === "guest"
                     ? "You joined with the invite code"
-                    : "A second player has claimed the room"
-                : "Another player can join using the invite code from /match"}
+                    : "Opponent joined"
+                : "Waiting for someone to join with the invite code"}
             </p>
           </div>
         </div>
@@ -112,10 +144,10 @@ export function RoomShell({
               {canReadyUp
                 ? viewerReady
                   ? matchStatus === "countdown"
-                    ? "Countdown is live. You can still unready right now to cancel the start."
-                    : "You are locked in. Unready if you want to change your selection."
+                    ? "Countdown is live. You can still unready to cancel the start."
+                    : "You're locked in. Click Unready to change your mind."
                   : matchStatus === "countdown"
-                    ? "If either player unreadies during countdown, the room goes back to waiting."
+                    ? "If either player unreadies during countdown, the room resets."
                     : "Both players are here. Mark yourself ready to start the countdown."
                 : "The ready button activates once both players are in the room."}
             </p>
@@ -136,7 +168,7 @@ export function RoomShell({
             <button
               type="button"
               onClick={onLeaveRoom}
-              className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white/82 transition hover:border-coral/55 hover:text-white"
+              className="rounded-full border border-white/15 px-6 py-3 font-semibold text-white/80 transition hover:border-coral/55 hover:text-white"
             >
               Leave room
             </button>

@@ -41,7 +41,7 @@ export function RoomLiveShell({
   initialStatus,
   initialHostReady,
   initialGuestReady,
-  initialCountdownEndsAt
+  initialCountdownEndsAt,
 }: RoomLiveShellProps) {
   const router = useRouter();
   const socketRef = useRef<Socket | null>(null);
@@ -54,18 +54,19 @@ export function RoomLiveShell({
     guestName,
     hostReady: initialHostReady,
     guestReady: initialGuestReady,
-    countdownEndsAt: initialCountdownEndsAt
+    countdownEndsAt: initialCountdownEndsAt,
   });
   const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "disconnected">("connecting");
   const [countdownLeft, setCountdownLeft] = useState<number | null>(null);
   const [isReadyPending, setIsReadyPending] = useState(false);
+  const [playerLeftName, setPlayerLeftName] = useState<string | null>(null);
 
   const joinPayload = useMemo<JoinPayload>(
     () => ({
       roomId,
       inviteCode,
       role: viewerRole,
-      handle: viewerRole === "host" ? hostName : guestName ?? "Guest"
+      handle: viewerRole === "host" ? hostName : guestName ?? "Guest",
     }),
     [guestName, hostName, inviteCode, roomId, viewerRole]
   );
@@ -73,27 +74,22 @@ export function RoomLiveShell({
   const isViewerReady = currentViewerRole === "host" ? presence.hostReady : presence.guestReady;
 
   function handleReadyToggle() {
-    if (connectionState !== "connected") {
-      return;
-    }
-
+    if (connectionState !== "connected") return;
     setIsReadyPending(true);
     socketRef.current?.emit("player:ready", {
       roomId,
       inviteCode,
       role: currentViewerRole,
-      ready: !isViewerReady
+      ready: !isViewerReady,
     });
   }
 
   function handleLeaveRoom() {
     const socket = socketRef.current;
-
     if (!socket) {
       router.push("/match" as Route);
       return;
     }
-
     socket.emit("room:leave", () => {
       router.push("/match" as Route);
     });
@@ -101,7 +97,9 @@ export function RoomLiveShell({
 
   useEffect(() => {
     const socket: Socket = io(getSocketUrl(), {
-      transports: ["websocket"]
+      transports: ["websocket"],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
     socketRef.current = socket;
 
@@ -120,17 +118,17 @@ export function RoomLiveShell({
     });
 
     socket.on("room:state", (nextPresence: RoomPresenceState) => {
-      if (nextPresence.roomId !== roomId) {
-        return;
-      }
+      if (nextPresence.roomId !== roomId) return;
 
       if (nextPresence.status === "active") {
         router.push(
-          `/duel/${roomId}?invite=${inviteCode}&host=${encodeURIComponent(nextPresence.hostName ?? hostName)}&guest=${encodeURIComponent(
+          `/duel/${roomId}?invite=${inviteCode}&host=${encodeURIComponent(
+            nextPresence.hostName ?? hostName
+          )}&guest=${encodeURIComponent(
             nextPresence.guestName ?? guestName ?? ""
-          )}&mode=${config.mode}&difficulty=${config.difficulty}&track=${config.duelLanguage ?? config.devCategory ?? "javascript"}&role=${
-            currentViewerRole
-          }` as Route
+          )}&mode=${config.mode}&difficulty=${config.difficulty}&track=${
+            config.duelLanguage ?? config.devCategory ?? "javascript"
+          }&role=${currentViewerRole}` as Route
         );
         return;
       }
@@ -143,15 +141,22 @@ export function RoomLiveShell({
         guestName: nextPresence.guestName,
         hostReady: nextPresence.hostReady,
         guestReady: nextPresence.guestReady,
-        countdownEndsAt: nextPresence.countdownEndsAt
+        countdownEndsAt: nextPresence.countdownEndsAt,
       }));
       setIsReadyPending(false);
+    });
+
+    socket.on("player:left", (payload: { name: string; role: "host" | "guest" }) => {
+      if (payload.role !== currentViewerRole) {
+        setPlayerLeftName(payload.name);
+      }
     });
 
     return () => {
       socketRef.current = null;
       socket.disconnect();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.devCategory, config.difficulty, config.duelLanguage, config.mode, guestName, hostName, inviteCode, joinPayload, roomId, router, currentViewerRole]);
 
   useEffect(() => {
@@ -160,35 +165,52 @@ export function RoomLiveShell({
       return;
     }
 
-    const updateCountdown = () => {
-      const secondsLeft = Math.max(0, Math.ceil((presence.countdownEndsAt! - Date.now()) / 1000));
-      setCountdownLeft(secondsLeft);
-    };
+    function updateCountdown() {
+      const ms = presence.countdownEndsAt! - Date.now();
+      const secs = Math.ceil(ms / 1000);
+      setCountdownLeft(Math.max(1, secs));
+    }
 
     updateCountdown();
     const interval = window.setInterval(updateCountdown, 250);
-
-    return () => {
-      window.clearInterval(interval);
-    };
+    return () => window.clearInterval(interval);
   }, [presence.countdownEndsAt, presence.status]);
 
   return (
-    <RoomShell
-      roomId={roomId}
-      inviteCode={inviteCode}
-      hostName={presence.hostName ?? hostName}
-      guestName={presence.guestName}
-      viewerRole={currentViewerRole}
-      config={config}
-      matchStatus={presence.status}
-      hostReady={presence.hostReady}
-      guestReady={presence.guestReady}
-      countdownLeft={countdownLeft}
-      connectionState={connectionState}
-      onReadyToggle={handleReadyToggle}
-      onLeaveRoom={handleLeaveRoom}
-      isReadyPending={isReadyPending}
-    />
+    <>
+      {playerLeftName && (
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-coral/40 bg-coral/10 px-5 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-lg">👋</span>
+            <p className="text-sm font-semibold text-white">
+              <span className="text-coral">{playerLeftName}</span> has left the room.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPlayerLeftName(null)}
+            className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/70 transition hover:bg-white/20"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      <RoomShell
+        roomId={roomId}
+        inviteCode={inviteCode}
+        hostName={presence.hostName ?? hostName}
+        guestName={presence.guestName}
+        viewerRole={currentViewerRole}
+        config={config}
+        matchStatus={presence.status}
+        hostReady={presence.hostReady}
+        guestReady={presence.guestReady}
+        countdownLeft={countdownLeft}
+        connectionState={connectionState}
+        onReadyToggle={handleReadyToggle}
+        onLeaveRoom={handleLeaveRoom}
+        isReadyPending={isReadyPending}
+      />
+    </>
   );
 }
