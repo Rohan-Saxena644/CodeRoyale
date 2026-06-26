@@ -36,7 +36,7 @@ export default async function HomePage() {
             </h1>
             <p className="mt-6 text-lg leading-8 text-white/60">
               Two developers. One problem. First to pass all test cases wins.
-              Watch your opponent's code evolve in real time.
+              Watch your opponent&apos;s code evolve in real time.
             </p>
             <div className="mt-10 flex flex-wrap justify-center gap-4">
               <Link
@@ -94,7 +94,7 @@ export default async function HomePage() {
                 step: "02",
                 icon: "💻",
                 title: "Solve the problem",
-                desc: "Both players get the same problem. Write your function — see your opponent's code update live.",
+                desc: "Both players get the same problem. Write your function \u2014 see your opponent\u2019s code update live.",
               },
               {
                 step: "03",
@@ -167,7 +167,7 @@ export default async function HomePage() {
               </div>
               <h2 className="text-4xl font-semibold text-white md:text-5xl">
                 Ready to prove<br />
-                <span className="text-gold">you're the fastest?</span>
+                <span className="text-gold">you&apos;re the fastest?</span>
               </h2>
               <p className="mx-auto mt-5 max-w-md text-base text-white/55">
                 Create a room, send your opponent the invite code, and start coding.
