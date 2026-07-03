@@ -87,7 +87,8 @@ export function buildDriver(
   userCode: string,
   functionName: string,
   args: unknown[],
-  params?: { name: string; type: string }[]
+  params?: { name: string; type: string }[],
+  returnType?: string
 ): { code: string; stdin: string } {
   const argsJson = JSON.stringify(args);
 
@@ -385,8 +386,7 @@ export function buildDriver(
     // We infer it from the rustTypeMap of the return annotation if available.
     // The submit route passes returnType alongside params — grab it here.
     // For the run route (no returnType), infer from output type.
-    const retType = (params as unknown as { returnType?: string } | undefined)?.returnType
-      ?? "number";
+    const retType = returnType ?? "number";
 
     // For number params we store as i64 (the widest integer) so the literal
     // always fits, then pass it through. If the user's function takes i32,

@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { io, type Socket } from "socket.io-client";
@@ -58,92 +59,95 @@ type MatchResult = {
   reason?: "timeout" | "ac";
 };
 
-type EmoteToast = {
-  id: number;
-  emote: string;
-  fromRole: "host" | "guest";
-};
-
-const EMOTES = ["👏", "💀", "🔥", "😤", "🤝", "🎯", "⚡", "🧠", "💪", "🤖"];
-
-const EMOTE_LABELS: Record<string, string> = {
-  "👏": "gg",
-  "💀": "rekt",
-  "🔥": "fire",
-  "😤": "try",
-  "🤝": "peace",
-  "🎯": "focus",
-  "⚡": "speed",
-  "🧠": "big brain",
-  "💪": "grind",
-  "🤖": "bot",
-};
+type StatusTone = "neutral" | "primary" | "success" | "warning" | "danger";
 
 const starterTemplates: Record<string, string> = {
   javascript: `// Waiting for problem...\n`,
-  python:     `# Waiting for problem...\n`,
-  cpp:        `// Waiting for problem...\n`,
-  go:         `// Waiting for problem...\n`,
-  rust:       `// Waiting for problem...\n`,
-  java:       `// Waiting for problem...\n`,
-  default:    `// Waiting for problem...\n`,
+  python: `# Waiting for problem...\n`,
+  cpp: `// Waiting for problem...\n`,
+  go: `// Waiting for problem...\n`,
+  rust: `// Waiting for problem...\n`,
+  java: `// Waiting for problem...\n`,
+  default: `// Waiting for problem...\n`,
 };
 
 const GO_TYPES: Record<string, string> = {
-  "number": "int", "number[]": "[]int",
-  "string": "string", "string[]": "[]string", "boolean": "bool",
+  number: "int",
+  "number[]": "[]int",
+  string: "string",
+  "string[]": "[]string",
+  boolean: "bool",
 };
 
 const CPP_TYPES: Record<string, string> = {
-  "number": "int", "number[]": "vector<int>",
-  "string": "string", "string[]": "vector<string>", "boolean": "bool",
+  number: "int",
+  "number[]": "vector<int>",
+  string: "string",
+  "string[]": "vector<string>",
+  boolean: "bool",
 };
 
 const JAVA_TYPES: Record<string, string> = {
-  "number": "int", "number[]": "int[]",
-  "string": "String", "string[]": "String[]", "boolean": "boolean",
+  number: "int",
+  "number[]": "int[]",
+  string: "String",
+  "string[]": "String[]",
+  boolean: "boolean",
 };
 
 const JAVA_ZERO: Record<string, string> = {
-  "number": "0", "boolean": "false", "string": '""',
-  "number[]": "null", "string[]": "null",
+  number: "0",
+  boolean: "false",
+  string: '""',
+  "number[]": "null",
+  "string[]": "null",
 };
 
-function buildStub(
-  lang: string,
-  name: string,
-  params: FunctionParam[],
-  returnType: string
-): string {
+const RUST_TYPES: Record<string, string> = {
+  number: "i64",
+  "number[]": "Vec<i64>",
+  string: "String",
+  "string[]": "Vec<String>",
+  boolean: "bool",
+};
+
+const RUST_ZERO: Record<string, string> = {
+  number: "0",
+  boolean: "false",
+  string: "String::new()",
+  "number[]": "Vec::new()",
+  "string[]": "Vec::new()",
+};
+
+function buildStub(lang: string, name: string, params: FunctionParam[], returnType: string): string {
   const simpleParams = params.map((p) => p.name).join(", ");
 
-  if (lang === "javascript") {
-    return "function " + name + "(" + simpleParams + ") {\n  // your solution here\n}\n";
-  }
-  if (lang === "python") {
-    return "def " + name + "(" + simpleParams + "):\n    # your solution here\n    pass\n";
-  }
+  if (lang === "javascript") return `function ${name}(${simpleParams}) {\n  // your solution here\n}\n`;
+  if (lang === "python") return `def ${name}(${simpleParams}):\n    # your solution here\n    pass\n`;
   if (lang === "go") {
-    const typedParams = params.map((p) => p.name + " " + (GO_TYPES[p.type] ?? "interface{}")).join(", ");
-    const ret  = GO_TYPES[returnType] ?? "interface{}";
+    const typedParams = params.map((p) => `${p.name} ${GO_TYPES[p.type] ?? "interface{}"}`).join(", ");
+    const ret = GO_TYPES[returnType] ?? "interface{}";
     const zero = ret === "int" ? "0" : ret === "bool" ? "false" : ret === "string" ? '""' : "nil";
-    return "package main\n\nfunc " + name + "(" + typedParams + ") " + ret + " {\n\t// your solution here\n\treturn " + zero + "\n}\n";
+    return `package main\n\nfunc ${name}(${typedParams}) ${ret} {\n\t// your solution here\n\treturn ${zero}\n}\n`;
   }
   if (lang === "cpp") {
-    const typedParams = params.map((p) => (CPP_TYPES[p.type] ?? "int") + " " + p.name).join(", ");
+    const typedParams = params.map((p) => `${CPP_TYPES[p.type] ?? "int"} ${p.name}`).join(", ");
     const ret = CPP_TYPES[returnType] ?? "int";
-    return "#include <bits/stdc++.h>\nusing namespace std;\n\n" + ret + " " + name + "(" + typedParams + ") {\n    // your solution here\n}\n";
+    return `#include <bits/stdc++.h>\nusing namespace std;\n\n${ret} ${name}(${typedParams}) {\n    // your solution here\n    return {};\n}\n`;
   }
   if (lang === "java") {
-    const typedParams = params.map((p) => (JAVA_TYPES[p.type] ?? "Object") + " " + p.name).join(", ");
-    const ret  = JAVA_TYPES[returnType] ?? "Object";
-    const zero = JAVA_ZERO[returnType]  ?? "null";
-    return "public static " + ret + " " + name + "(" + typedParams + ") {\n    // your solution here\n    return " + zero + ";\n}\n";
+    const typedParams = params.map((p) => `${JAVA_TYPES[p.type] ?? "Object"} ${p.name}`).join(", ");
+    const ret = JAVA_TYPES[returnType] ?? "Object";
+    const zero = JAVA_ZERO[returnType] ?? "null";
+    return `public static ${ret} ${name}(${typedParams}) {\n    // your solution here\n    return ${zero};\n}\n`;
   }
   if (lang === "rust") {
-    return "fn " + name + "(" + simpleParams + ") {\n    // your solution here\n}\n";
+    const typedParams = params.map((p) => `${p.name}: ${RUST_TYPES[p.type] ?? "i64"}`).join(", ");
+    const ret = RUST_TYPES[returnType] ?? "i64";
+    const zero = RUST_ZERO[returnType] ?? "0";
+    return `fn ${name}(${typedParams}) -> ${ret} {\n    // your solution here\n    ${zero}\n}\n`;
   }
-  return "function " + name + "(" + simpleParams + ") {\n  // your solution here\n}\n";
+  return `function ${name}(${simpleParams}) {\n  // your solution here\n}\n`;
 }
 
 function getSocketUrl(): string {
@@ -151,62 +155,60 @@ function getSocketUrl(): string {
 }
 
 function getEditorLanguage(config: MatchConfig): string {
-  if (config.mode === "competitive") return config.duelLanguage ?? "javascript";
-  return "javascript";
+  return config.mode === "competitive" ? config.duelLanguage ?? "javascript" : "javascript";
 }
 
-export function DuelLiveShell({
-  roomId,
-  inviteCode,
-  hostName,
-  guestName,
-  viewerRole,
-  config,
-}: DuelLiveShellProps) {
-  const router          = useRouter();
-  const socketRef       = useRef<Socket | null>(null);
-  const syncTimeoutRef  = useRef<number | null>(null);
-  const emoteCounterRef = useRef(0);
-  const lastEmoteRef    = useRef(0);
+function StatusBadge({ children, tone = "neutral" }: { children: ReactNode; tone?: StatusTone }) {
+  const classes = {
+    neutral: "border-borderSoft bg-surface3 text-textMuted",
+    primary: "border-primary/30 bg-primary/10 text-primary",
+    success: "border-success/30 bg-success/10 text-success",
+    warning: "border-warning/30 bg-warning/10 text-warning",
+    danger: "border-danger/30 bg-danger/10 text-danger",
+  };
+  return <span className={`rounded-md border px-2 py-1 text-xs font-medium ${classes[tone]}`}>{children}</span>;
+}
+
+function editorOptions(readOnly = false) {
+  return {
+    readOnly,
+    minimap: { enabled: false },
+    fontSize: 14,
+    wordWrap: "on" as const,
+    automaticLayout: true,
+    scrollBeyondLastLine: false,
+    padding: { top: 12, bottom: 12 },
+    contextmenu: false,
+  };
+}
+
+export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerRole, config }: DuelLiveShellProps) {
+  const router = useRouter();
+  const socketRef = useRef<Socket | null>(null);
+  const syncTimeoutRef = useRef<number | null>(null);
+  const roleRef = useRef<"host" | "guest">(viewerRole);
 
   const editorLanguage = getEditorLanguage(config);
-  const starterCode    = starterTemplates[editorLanguage] ?? starterTemplates.default;
+  const starterCode = starterTemplates[editorLanguage] ?? starterTemplates.default;
 
   const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "disconnected">("connecting");
-  const [myCode,          setMyCode]          = useState<string>(starterCode);
-  const [opponentCode,    setOpponentCode]    = useState<string>(starterCode);
+  const [myCode, setMyCode] = useState(starterCode);
+  const [opponentCode, setOpponentCode] = useState(starterCode);
   const [viewerRoleState, setViewerRoleState] = useState<"host" | "guest">(viewerRole);
-  const [problem,         setProblem]         = useState<Problem | null>(null);
-  const [verdict,         setVerdict]         = useState<Verdict | null>(null);
-  const [submitting,      setSubmitting]      = useState(false);
-  const [timeLeft,        setTimeLeft]        = useState(30 * 60);
-  const [matchResult,     setMatchResult]     = useState<MatchResult | null>(null);
-  const [emoteToasts,     setEmoteToasts]     = useState<EmoteToast[]>([]);
-  const [opponentLeft,    setOpponentLeft]    = useState<string | null>(null);
-  const [emoteCooldown,   setEmoteCooldown]   = useState(false);
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(30 * 60);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [opponentLeft, setOpponentLeft] = useState<string | null>(null);
+  const [opponentTouched, setOpponentTouched] = useState(false);
 
-  const selfHandle     = useMemo(() => viewerRole === "host" ? hostName : guestName ?? "Guest", [guestName, hostName, viewerRole]);
-  const myHandle       = viewerRoleState === "host" ? hostName : (guestName ?? "Guest");
-  const opponentHandle = viewerRoleState === "host" ? (guestName ?? "Opponent") : hostName;
-
-  const addEmoteToast = useCallback((emote: string, fromRole: "host" | "guest") => {
-    const id = ++emoteCounterRef.current;
-    setEmoteToasts((prev) => [...prev, { id, emote, fromRole }]);
-    setTimeout(() => setEmoteToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
-  }, []);
-
-  function sendEmote(emote: string) {
-    const now = Date.now();
-    if (now - lastEmoteRef.current < 1500) return;
-    lastEmoteRef.current = now;
-    setEmoteCooldown(true);
-    setTimeout(() => setEmoteCooldown(false), 1500);
-    socketRef.current?.emit("emote:send", { roomId, emote, fromRole: viewerRoleState });
-    addEmoteToast(emote, viewerRoleState);
-  }
+  const selfHandle = useMemo(() => (viewerRole === "host" ? hostName : guestName ?? "Guest"), [guestName, hostName, viewerRole]);
+  const myHandle = viewerRoleState === "host" ? hostName : guestName ?? "Guest";
+  const opponentHandle = viewerRoleState === "host" ? guestName ?? "Opponent" : hostName;
 
   function emitCode(code: string) {
-    socketRef.current?.emit("code:sync", { roomId, inviteCode, role: viewerRoleState, code });
+    socketRef.current?.emit("code:sync", { roomId, inviteCode, role: roleRef.current, code });
   }
 
   function handleCodeChange(nextValue: string | undefined) {
@@ -218,42 +220,41 @@ export function DuelLiveShell({
 
   function handleLeaveDuel() {
     const socket = socketRef.current;
-    if (!socket) { router.push("/match" as Route); return; }
+    if (!socket) {
+      router.push("/match" as Route);
+      return;
+    }
     socket.emit("room:leave", () => router.push("/match" as Route));
   }
 
   useEffect(() => {
-    const socket: Socket = io(getSocketUrl(), {
-      transports: ["websocket"],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    roleRef.current = viewerRoleState;
+  }, [viewerRoleState]);
+
+  useEffect(() => {
+    const socket: Socket = io(getSocketUrl(), { transports: ["websocket"], reconnectionAttempts: 5, reconnectionDelay: 1000 });
     socketRef.current = socket;
 
     socket.on("connect", () => {
       setConnectionState("connected");
-      socket.emit("room:join", { roomId, inviteCode, role: viewerRoleState, handle: selfHandle });
-      socket.emit("duel:join", { roomId, inviteCode, role: viewerRoleState, code: myCode });
+      socket.emit("room:join", { roomId, inviteCode, role: roleRef.current, handle: selfHandle });
+      socket.emit("duel:join", { roomId, inviteCode, role: roleRef.current, code: myCode });
     });
 
     socket.on("disconnect", () => setConnectionState("disconnected"));
     socket.on("connect_error", () => setConnectionState("disconnected"));
-
     socket.on("room:role-updated", (nextRole: "host" | "guest") => {
+      roleRef.current = nextRole;
       setViewerRoleState(nextRole);
     });
-
     socket.on("room:state", (nextPresence: { status: string }) => {
-      if (nextPresence.status !== "active") {
-        router.push(("/room/" + roomId + "?invite=" + inviteCode + "&role=" + viewerRoleState) as Route);
-      }
+      if (nextPresence.status !== "active") router.push((`/room/${roomId}?invite=${inviteCode}&role=${roleRef.current}`) as Route);
     });
-
     socket.on("code:state", (payload: { role: "host" | "guest"; code: string }) => {
-      if (payload.role === viewerRoleState) return;
+      if (payload.role === roleRef.current) return;
       setOpponentCode(payload.code);
+      setOpponentTouched(true);
     });
-
     socket.on("problem:ready", (incoming: Problem) => {
       setProblem(incoming);
       const sig = incoming.rawJson?.functionSignature;
@@ -261,26 +262,20 @@ export function DuelLiveShell({
       const stub = buildStub(editorLanguage, sig.name, sig.params, sig.returnType);
       setMyCode(stub);
       setOpponentCode(stub);
-      setTimeout(() => emitCode(stub), 150);
+      setTimeout(() => {
+        socketRef.current?.emit("code:sync", { roomId, inviteCode, role: roleRef.current, code: stub });
+      }, 150);
     });
-
     socket.on("match:ended", (payload: { winnerRole: "host" | "guest" | "draw"; reason?: string }) => {
       setMatchResult({
         winnerRole: payload.winnerRole,
-        iWon:   payload.winnerRole === viewerRoleState,
+        iWon: payload.winnerRole === roleRef.current,
         isDraw: payload.winnerRole === "draw",
         reason: payload.reason as "timeout" | "ac" | undefined,
       });
     });
-
     socket.on("player:left", (payload: { name: string; role: "host" | "guest" }) => {
-      if (payload.role !== viewerRoleState) {
-        setOpponentLeft(payload.name);
-      }
-    });
-
-    socket.on("emote:receive", (payload: { emote: string; fromRole: "host" | "guest" }) => {
-      addEmoteToast(payload.emote, payload.fromRole);
+      if (payload.role !== roleRef.current) setOpponentLeft(payload.name);
     });
 
     return () => {
@@ -325,322 +320,175 @@ export function DuelLiveShell({
 
   const timeIsLow = timeLeft <= 60;
   const timeDisplay = `${String(Math.floor(timeLeft / 60)).padStart(2, "0")}:${String(timeLeft % 60).padStart(2, "0")}`;
+  const myStatus = matchResult ? "Ended" : verdict?.verdict === "AC" ? "Accepted" : submitting ? "Running" : myCode.trim() ? "Editing" : "Waiting";
+  const myTone: StatusTone = myStatus === "Accepted" ? "success" : myStatus === "Running" ? "warning" : myStatus === "Editing" ? "primary" : "neutral";
+  const opponentStatus = opponentLeft ? "Disconnected" : opponentTouched ? "Editing" : connectionState === "connected" ? "Connected" : "Waiting";
+  const opponentTone: StatusTone = opponentLeft ? "danger" : opponentStatus === "Editing" ? "primary" : opponentStatus === "Connected" ? "success" : "neutral";
+  const connectionTone: StatusTone = connectionState === "connected" ? "success" : connectionState === "connecting" ? "warning" : "danger";
 
   return (
-    <main className="relative pb-16">
-
+    <main className="pb-6">
       {opponentLeft && (
-        <div className="sticky top-0 z-40 flex items-center justify-between gap-4 bg-coral/90 px-6 py-3 backdrop-blur-sm">
-          <p className="text-sm font-semibold text-white">
-            {opponentLeft} has left the room.
-          </p>
-          <button
-            type="button"
-            onClick={() => setOpponentLeft(null)}
-            className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/30"
-          >
-            Dismiss
-          </button>
+        <div className="sticky top-0 z-40 flex items-center justify-between gap-4 border-b border-danger/30 bg-danger/10 px-6 py-3 backdrop-blur-sm">
+          <p className="text-sm font-semibold text-textMain">{opponentLeft} has left the room.</p>
+          <button type="button" onClick={() => setOpponentLeft(null)} className="rounded-lg border border-border px-3 py-1 text-xs font-semibold text-textMuted hover:text-textMain">Dismiss</button>
         </div>
       )}
 
       {matchResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
-          <div className={[
-            "relative flex flex-col items-center gap-5 rounded-3xl border px-14 py-12 text-center shadow-2xl",
-            matchResult.isDraw  ? "border-white/20 bg-[#111111]" :
-            matchResult.iWon    ? "border-lime/40 bg-[#070f07]"  :
-                                  "border-red-500/30 bg-[#100707]",
-          ].join(" ")}>
-            {matchResult.iWon && !matchResult.isDraw && (
-              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
-                <div className="absolute left-1/2 top-0 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime/20 blur-[80px]" />
-              </div>
-            )}
-            <div className="relative text-8xl">
-              {matchResult.isDraw ? "🤝" : matchResult.iWon ? "🏆" : "💀"}
-            </div>
-            <h1 className={[
-              "relative text-5xl font-black tracking-tight",
-              matchResult.isDraw ? "text-white/80" : matchResult.iWon ? "text-lime" : "text-red-400",
-            ].join(" ")}>
-              {matchResult.isDraw ? "Draw!" : matchResult.iWon ? "Victory!" : "Defeated"}
-            </h1>
-            <p className="relative text-sm text-white/50 max-w-xs leading-6">
-              {matchResult.isDraw
-                ? (matchResult.reason === "timeout" ? "Time's up — both players tied on score" : "Both players tied")
-                : matchResult.iWon
-                ? (matchResult.reason === "timeout" ? "Time's up — you had the higher score!" : "You solved it first — gg " + opponentHandle + "!")
-                : (matchResult.reason === "timeout"
-                    ? "Time's up — " + (matchResult.winnerRole === "host" ? hostName : guestName ?? "Opponent") + " had the higher score"
-                    : (matchResult.winnerRole === "host" ? hostName : guestName ?? "Opponent") + " solved it first")}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 text-center shadow-card">
+            <StatusBadge tone={matchResult.isDraw ? "warning" : matchResult.iWon ? "success" : "danger"}>{matchResult.reason ?? "complete"}</StatusBadge>
+            <h1 className="mt-4 text-3xl font-semibold text-textMain">{matchResult.isDraw ? "Draw" : matchResult.iWon ? "Accepted first" : "Opponent accepted first"}</h1>
+            <p className="mt-3 text-sm leading-6 text-textMuted">
+              {matchResult.isDraw ? "Both players tied on score." : matchResult.iWon ? `You beat ${opponentHandle} to Accepted.` : `${opponentHandle} solved it first.`}
             </p>
-            <div className="relative mt-2 flex gap-3">
-              <button
-                type="button"
-                onClick={() => router.push("/match" as Route)}
-                className="rounded-full bg-white px-8 py-2.5 text-sm font-semibold text-ink transition hover:scale-[1.02]"
-              >
-                Back to Lobby
-              </button>
-              <button
-                type="button"
-                onClick={() => setMatchResult(null)}
-                className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-              >
-                View code
-              </button>
+            <div className="mt-6 flex justify-center gap-3">
+              <button type="button" onClick={() => router.push("/match" as Route)} className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primaryHover">Back to lobby</button>
+              <button type="button" onClick={() => setMatchResult(null)} className="rounded-lg border border-border px-5 py-2.5 text-sm font-semibold text-textMuted hover:text-textMain">View code</button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="pointer-events-none fixed bottom-8 right-6 z-40 flex flex-col items-end gap-2">
-        {emoteToasts.map((t) => (
-          <div
-            key={t.id}
-            className={[
-              "animate-bounce rounded-2xl border px-4 py-2 text-2xl shadow-lg",
-              t.fromRole === viewerRoleState ? "border-lime/30 bg-lime/10" : "border-white/20 bg-white/10",
-            ].join(" ")}
-          >
-            {t.emote}
-            <span className="ml-2 text-xs font-semibold text-white/50">
-              {t.fromRole === viewerRoleState ? "you" : opponentHandle}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <section className="mx-auto mt-6 max-w-[1600px] px-4 lg:px-6">
-
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {[config.mode, config.duelLanguage ?? config.devCategory, config.difficulty].map((label) => (
-              <span key={label} className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold capitalize text-white/60">
-                {label}
-              </span>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className={[
-              "flex items-center gap-1 rounded-full border px-2 py-1 transition-opacity",
-              emoteCooldown ? "opacity-50 pointer-events-none" : "opacity-100",
-              "border-white/10 bg-black/20",
-            ].join(" ")}>
-              {EMOTES.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => sendEmote(e)}
-                  title={EMOTE_LABELS[e]}
-                  className="rounded-full px-1.5 py-0.5 text-base transition hover:bg-white/10 active:scale-125"
-                >
-                  {e}
-                </button>
-              ))}
+      <section className="mx-auto max-w-[1800px] px-4 lg:px-6">
+        <div className="sticky top-0 z-30 -mx-4 border-y border-border bg-bg/95 px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-base font-semibold text-textMain">{problem?.title ?? "Generating problem"}</h1>
+                <StatusBadge tone={problem?.difficulty === "hard" ? "danger" : problem?.difficulty === "easy" ? "success" : "warning"}>{problem?.difficulty ?? config.difficulty}</StatusBadge>
+                <StatusBadge>{editorLanguage}</StatusBadge>
+              </div>
+              <p className="mt-1 text-xs text-textSoft">Invite {inviteCode} · {myHandle} vs {opponentHandle}</p>
             </div>
-            <span className={[
-              "rounded-full border px-3 py-1.5 text-xs font-semibold",
-              connectionState === "connected" ? "border-lime/30 bg-lime/10 text-lime" : "border-gold/30 bg-gold/10 text-gold",
-            ].join(" ")}>
-              {connectionState === "connected" ? "● live" : "● connecting"}
-            </span>
-            <button type="button" onClick={handleLeaveDuel}
-              className="rounded-full border border-white/15 px-4 py-1.5 text-sm font-semibold text-white/70 transition hover:border-coral/50 hover:text-white">
-              Leave
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge tone={connectionTone}>{connectionState === "connected" ? "Connected" : connectionState}</StatusBadge>
+              <div className={`rounded-lg border px-3 py-2 font-mono text-sm ${timeIsLow ? "border-danger/40 bg-danger/10 text-danger" : "border-border bg-surface2 text-textMain"}`}>{timeDisplay}</div>
+              <StatusBadge tone={myTone}>You: {myStatus}</StatusBadge>
+              <StatusBadge tone={opponentTone}>Opponent: {opponentStatus}</StatusBadge>
+              <button type="button" onClick={handleLeaveDuel} className="rounded-lg border border-border bg-surface2 px-4 py-2 text-sm font-semibold text-textMuted transition hover:border-danger hover:text-danger">Leave</button>
+            </div>
           </div>
         </div>
 
-        <div className="mb-4 max-h-[380px] overflow-y-auto rounded-[20px] border border-white/10 bg-panel/92 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex-1">
-              {problem ? (
-                <>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Problem</p>
-                  <h2 className="mt-1.5 text-xl font-semibold text-white">{problem.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-white/65">{problem.prompt}</p>
-                  <ul className="mt-3 space-y-1">
-                    {problem.rawJson?.constraints?.map((c, i) => (
-                      <li key={i} className="text-xs text-white/50">• {c}</li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">Problem</p>
-                  <p className="mt-2 animate-pulse text-sm text-white/40">Generating problem...</p>
-                </>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-3 text-sm">
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2">
-                <span className="text-white/45">Host</span>
-                <span className="ml-2 font-semibold text-white">{hostName}</span>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-2">
-                <span className="text-white/45">Guest</span>
-                <span className="ml-2 font-semibold text-white">{guestName ?? "—"}</span>
-              </div>
-              <div className={[
-                "rounded-2xl border px-4 py-2 font-semibold tabular-nums",
-                timeIsLow
-                  ? "border-red-500/50 bg-red-500/15 text-red-400 animate-pulse"
-                  : timeLeft <= 300
-                  ? "border-gold/40 bg-gold/10 text-gold"
-                  : "border-white/10 bg-black/20 text-white/70",
-              ].join(" ")}>
-                {timeDisplay}
-              </div>
-            </div>
-          </div>
-          {problem?.rawJson?.examples?.map((ex, i) => (
-            <div key={i} className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
-              <p className="text-white/50">Example {i + 1}</p>
-              <p className="mt-1 text-white">Input: <code>{JSON.stringify(ex.args)}</code></p>
-              <p className="text-white">Output: <code>{JSON.stringify(ex.output)}</code></p>
-              {ex.explanation && <p className="mt-1 text-white/40">{ex.explanation}</p>}
-            </div>
-          ))}
-        </div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-[0.78fr_1fr_1fr]">
+          <aside className="max-h-[720px] overflow-y-auto rounded-xl border border-border bg-surface p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Problem statement</p>
+            {problem ? (
+              <>
+                <h2 className="mt-3 text-xl font-semibold text-textMain">{problem.title}</h2>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-textMuted">{problem.prompt}</p>
+                {problem.rawJson?.examples?.map((ex, i) => (
+                  <div key={i} className="mt-4 rounded-lg border border-borderSoft bg-bgSoft p-3 text-xs">
+                    <p className="font-semibold text-textMain">Example {i + 1}</p>
+                    <p className="mt-2 text-textMuted">Input: <code>{JSON.stringify(ex.args)}</code></p>
+                    <p className="text-textMuted">Output: <code>{JSON.stringify(ex.output)}</code></p>
+                    {ex.explanation && <p className="mt-2 text-textSoft">{ex.explanation}</p>}
+                  </div>
+                ))}
+                {problem.rawJson?.constraints?.length ? (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Constraints</p>
+                    <ul className="mt-2 space-y-1 text-xs text-textMuted">
+                      {problem.rawJson.constraints.map((c, i) => <li key={i}>{c}</li>)}
+                    </ul>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-textMuted">Generating the shared problem...</p>
+            )}
+          </aside>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-
-          <div className="rounded-[20px] border border-lime/25 bg-panel/92 p-4">
+          <section className="rounded-xl border border-border bg-surface p-3">
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
-              <div>
-                <p className="text-sm font-semibold text-white">{myHandle}</p>
-                <p className="text-xs uppercase tracking-[0.16em] text-white/40">you · {editorLanguage}</p>
-              </div>
-              <span className="rounded-full border border-lime/30 bg-lime/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime">writable</span>
+              <div><p className="text-sm font-semibold text-textMain">{myHandle}</p><p className="text-xs text-textSoft">Your editor</p></div>
+              <StatusBadge tone={myTone}>{myStatus}</StatusBadge>
             </div>
-            <div className="overflow-hidden rounded-[14px] border border-white/10">
+            <div className="overflow-hidden rounded-lg border border-borderSoft bg-editorBg">
               <Editor
-                height="520px"
+                height="620px"
                 language={editorLanguage}
                 theme="vs-dark"
                 value={myCode}
                 onChange={handleCodeChange}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  wordWrap: "on",
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  padding: { top: 12, bottom: 12 },
-                  contextmenu: false,
-                }}
+                options={editorOptions(false)}
                 onMount={(editor) => {
                   editor.onKeyDown((e) => {
-                    const isCopyPaste =
-                      (e.ctrlKey || e.metaKey) &&
-                      (e.code === "KeyV" || e.code === "KeyC" || e.code === "KeyX");
+                    const isCopyPaste = (e.ctrlKey || e.metaKey) && ["KeyV", "KeyC", "KeyX"].includes(e.code);
                     if (isCopyPaste) {
                       e.preventDefault();
                       e.stopPropagation();
                     }
                   });
-                  editor.getDomNode()?.addEventListener("paste", (ev) => {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                  });
-                  editor.getDomNode()?.addEventListener("copy", (ev) => {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                  });
-                  editor.getDomNode()?.addEventListener("cut", (ev) => {
-                    ev.preventDefault();
-                    ev.stopPropagation();
+                  ["paste", "copy", "cut"].forEach((eventName) => {
+                    editor.getDomNode()?.addEventListener(eventName, (ev) => {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                    });
                   });
                 }}
               />
             </div>
-            <div className="mt-3 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting || !!matchResult}
-                className="rounded-full border border-lime/40 bg-lime/15 px-5 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime transition hover:bg-lime/25 disabled:opacity-50"
-              >
-                {submitting ? "Running..." : "Submit"}
-              </button>
-              {verdict && (
-                <div className={[
-                  "rounded-xl border px-4 py-1.5 text-sm font-semibold",
-                  verdict.verdict === "AC"
-                    ? "border-lime/30 bg-lime/10 text-lime"
-                    : verdict.hasJudgeErrors
-                      ? "border-gold/30 bg-gold/10 text-gold"
-                      : "border-red-500/30 bg-red-500/10 text-red-400",
-                ].join(" ")}>
-                  {verdict.verdict === "AC" ? "✓ Accepted" : verdict.hasJudgeErrors ? "⚠ Judge error" : "✗ Wrong Answer"} — {verdict.passedTests}/{verdict.totalTests} tests
-                </div>
-              )}
-            </div>
-            {verdict?.hasJudgeErrors && (
-              <p className="mt-2 rounded-xl border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold">
-                The grading service had trouble running one or more tests — this is likely a temporary issue. Wait a few seconds and try again.
-              </p>
-            )}
-            {verdict?.results && verdict.results.length > 0 && (
-              <div className="mt-2 space-y-1.5">
-                {verdict.results.map((r, i) => (
-                  <div key={i} className={[
-                    "rounded-lg border px-3 py-2 text-xs",
-                    r.passed ? "border-lime/20 bg-lime/5 text-white/70" : "border-red-500/20 bg-red-500/5 text-white/70",
-                  ].join(" ")}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold">
-                        {r.passed ? "✓" : r.isJudgeError ? "⚠" : "✗"} Test {i + 1}
-                      </span>
-                      <span className="text-white/40">input: <code>{r.input}</code></span>
-                    </div>
-                    {!r.passed && (
-                      <p className="mt-1 text-white/50">
-                        {r.error
-                          ? r.isJudgeError
-                            ? `Judge error: ${r.error}`
-                            : `Error: ${r.error}`
-                          : `Expected ${r.expected}, got ${r.actual || "(empty)"}`}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          </section>
 
-          <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
+          <section className="rounded-xl border border-border bg-surface p-3">
             <div className="mb-3 flex items-center justify-between gap-3 px-1">
-              <div>
-                <p className="text-sm font-semibold text-white/75">{opponentHandle}</p>
-                <p className="text-xs uppercase tracking-[0.16em] text-white/40">opponent · {editorLanguage}</p>
-              </div>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-white/45">read only</span>
+              <div><p className="text-sm font-semibold text-textMain">{opponentHandle}</p><p className="text-xs text-textSoft">Opponent editor</p></div>
+              <StatusBadge tone={opponentTone}>{opponentStatus}</StatusBadge>
             </div>
-            <div className="overflow-hidden rounded-[14px] border border-white/10">
-              <Editor
-                height="520px"
-                language={editorLanguage}
-                theme="vs-dark"
-                value={opponentCode}
-                options={{
-                  readOnly: true,
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  wordWrap: "on",
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  padding: { top: 12, bottom: 12 },
-                  contextmenu: false,
-                }}
-              />
+            <div className="overflow-hidden rounded-lg border border-borderSoft bg-editorBg">
+              <Editor height="620px" language={editorLanguage} theme="vs-dark" value={opponentCode} options={editorOptions(true)} />
             </div>
+          </section>
+        </div>
+
+        <section className="mt-4 rounded-xl border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-textMain">Test cases / Output / Submission results</p>
+              <p className="mt-1 text-xs text-textSoft">Visible judge output appears here after you submit.</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting || !!matchResult || !problem}
+              className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primaryHover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {submitting ? "Running..." : "Submit"}
+            </button>
           </div>
 
-        </div>
+          {verdict ? (
+            <div className="mt-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge tone={verdict.verdict === "AC" ? "success" : verdict.hasJudgeErrors ? "warning" : "danger"}>
+                  {verdict.verdict === "AC" ? "Accepted" : verdict.hasJudgeErrors ? "Judge error" : "Failed"}
+                </StatusBadge>
+                <span className="text-sm text-textMuted">{verdict.passedTests}/{verdict.totalTests} tests passed</span>
+              </div>
+              {verdict.hasJudgeErrors && <p className="mt-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">The grading service had trouble running one or more tests. Wait a few seconds and try again.</p>}
+              {verdict.results?.length ? (
+                <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                  {verdict.results.map((r, i) => (
+                    <div key={i} className={`rounded-lg border px-3 py-2 text-xs ${r.passed ? "border-success/20 bg-success/5" : "border-danger/20 bg-danger/5"}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold text-textMain">Test {i + 1}: {r.passed ? "Passed" : r.isJudgeError ? "Judge error" : "Failed"}</span>
+                        <span className="font-mono text-textSoft">input {r.input}</span>
+                      </div>
+                      {!r.passed && <p className="mt-1 text-textMuted">{r.error ? r.error : `Expected ${r.expected}, got ${r.actual || "(empty)"}`}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-lg border border-borderSoft bg-bgSoft px-3 py-3 text-sm text-textMuted">No submission yet.</div>
+          )}
+        </section>
       </section>
     </main>
   );
 }
+

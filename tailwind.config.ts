@@ -9,16 +9,32 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#121212",
-        panel: "#1f1e1a",
-        panelEdge: "#3d3a31",
-        gold: "#f4bd51",
-        lime: "#95df61",
-        coral: "#f07b6e",
-        mist: "#ebe4d4"
+        bg: "#080C10",
+        bgSoft: "#0D1117",
+        surface: "#111827",
+        surface2: "#151B23",
+        surface3: "#1C2430",
+        border: "#273241",
+        borderSoft: "#1E293B",
+        textMain: "#F8FAFC",
+        textMuted: "#94A3B8",
+        textSoft: "#64748B",
+        primary: "#3B82F6",
+        primaryHover: "#2563EB",
+        success: "#22C55E",
+        warning: "#F59E0B",
+        danger: "#EF4444",
+        editorBg: "#0D1117",
+        ink: "#080C10",
+        panel: "#111827",
+        panelEdge: "#273241",
+        gold: "#3B82F6",
+        lime: "#22C55E",
+        coral: "#EF4444",
+        mist: "#F8FAFC"
       },
       boxShadow: {
-        card: "0 18px 40px rgba(0, 0, 0, 0.28)"
+        card: "0 14px 32px rgba(0, 0, 0, 0.24)"
       },
       backgroundImage: {
         grain:
@@ -26,11 +42,14 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          "Inter",
           "ui-sans-serif",
           "system-ui",
           "sans-serif"
         ],
         mono: [
+          "JetBrains Mono",
+          "Fira Code",
           "ui-monospace",
           "SFMono-Regular",
           "monospace"

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useTransition } from "react";
 import type { FormEvent } from "react";
@@ -20,21 +20,13 @@ export function MatchForm() {
     setError(null);
 
     const formData = new FormData(event.currentTarget);
-
-    const payload: MatchConfig = {
-      mode: "competitive",
-      difficulty,
-      duelLanguage,
-    };
+    const payload: MatchConfig = { mode: "competitive", difficulty, duelLanguage };
 
     startTransition(async () => {
       const response = await fetch("/api/match", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          hostName: formData.get("hostName"),
-          config: payload,
-        }),
+        body: JSON.stringify({ hostName: formData.get("hostName"), config: payload }),
       });
 
       if (!response.ok) {
@@ -48,37 +40,30 @@ export function MatchForm() {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="card-border rounded-[28px] border border-white/10 bg-panel/90 p-6"
-    >
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Host a duel</p>
-      <h2 className="mt-3 text-2xl font-semibold text-white">Create a room</h2>
-      <p className="mt-2 text-sm leading-6 text-white/60">
+    <form onSubmit={handleSubmit} className="card-border rounded-xl border border-border bg-surface p-6">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Host a room</p>
+      <h2 className="mt-3 text-2xl font-semibold text-textMain">Host a room</h2>
+      <p className="mt-2 text-sm leading-6 text-textMuted">
         Set up the room and share the invite code with your opponent.
       </p>
 
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <label className="space-y-2 text-sm text-white/75">
-          <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-            Your name
-          </span>
+      <div className="mt-6 grid gap-5">
+        <label className="space-y-2 text-sm text-textMuted">
+          <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Your name</span>
           <input
             name="hostName"
-            placeholder="royale_builder"
+            placeholder="dev_handle"
             required
-            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-gold/60"
+            className="w-full rounded-lg border border-border bg-bgSoft px-3 py-2.5 text-textMain outline-none transition placeholder:text-textSoft focus:border-primary"
           />
         </label>
 
-        <label className="space-y-2 text-sm text-white/75">
-          <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-            Difficulty
-          </span>
+        <label className="space-y-2 text-sm text-textMuted">
+          <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Difficulty</span>
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value as MatchConfig["difficulty"])}
-            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-gold/60"
+            className="w-full rounded-lg border border-border bg-bgSoft px-3 py-2.5 text-textMain outline-none transition focus:border-primary"
           >
             <option value="easy">Easy</option>
             <option value="medium">Medium</option>
@@ -87,19 +72,15 @@ export function MatchForm() {
         </label>
       </div>
 
-      <label className="mt-6 block space-y-2 text-sm text-white/75">
-        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-          Language
-        </span>
+      <label className="mt-5 block space-y-2 text-sm text-textMuted">
+        <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Language</span>
         <select
           value={duelLanguage}
           onChange={(e) => setDuelLanguage(e.target.value as DuelLanguage)}
-          className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none transition focus:border-lime/60"
+          className="w-full rounded-lg border border-border bg-bgSoft px-3 py-2.5 text-textMain outline-none transition focus:border-primary"
         >
           {duelLanguages.map((lang) => (
-            <option key={lang} value={lang}>
-              {lang}
-            </option>
+            <option key={lang} value={lang}>{lang}</option>
           ))}
         </select>
       </label>
@@ -108,13 +89,14 @@ export function MatchForm() {
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-full bg-white px-6 py-3 font-semibold text-ink transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primaryHover disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPending ? "Creating room…" : "Create duel room"}
+          {isPending ? "Creating room..." : "Create duel room"}
         </button>
       </div>
 
-      {error ? <p className="mt-4 text-sm text-coral">{error}</p> : null}
+      {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
     </form>
   );
 }
+

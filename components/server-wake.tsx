@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 
@@ -32,7 +32,6 @@ export function ServerWake({ children }: { children: React.ReactNode }) {
       }
 
       elapsedId = setInterval(() => setElapsed((e) => e + 1), 1000);
-
       pollId = setInterval(() => {
         ping().then((ok) => {
           if (ok) {
@@ -62,36 +61,28 @@ export function ServerWake({ children }: { children: React.ReactNode }) {
       : "Taking a little longer than usual...";
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-ink">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/5 blur-[120px]" />
-      </div>
-
-      <div className="relative flex flex-col items-center gap-8 px-6 text-center">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg">
+      <div className="relative flex flex-col items-center gap-6 px-6 text-center">
         <div className="flex items-center gap-2.5">
-          <span className="text-2xl">⚔️</span>
-          <span className="text-xl font-semibold tracking-tight text-white">
-            Code<span className="text-gold">Royale</span>
-          </span>
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface2 text-sm font-semibold text-primary">CR</span>
+          <span className="text-xl font-semibold tracking-tight text-textMain">CodeRoyale</span>
         </div>
 
-        <div className="relative flex h-16 w-16 items-center justify-center">
-          <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-gold/70" />
-          <div className="absolute inset-2 animate-spin rounded-full border-2 border-transparent border-t-gold/30 [animation-direction:reverse] [animation-duration:1.5s]" />
-          <div className="h-2 w-2 rounded-full bg-gold/60" />
+        <div className="relative flex h-14 w-14 items-center justify-center">
+          <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-primary" />
+          <div className="h-2 w-2 rounded-full bg-primary" />
         </div>
 
         <div className="flex flex-col items-center gap-2">
-          <p className="text-base font-medium text-white/80">{message}</p>
-          <p className="text-sm text-white/35">
-            {elapsed > 0 ? `${elapsed}s elapsed` : "Connecting..."}
-          </p>
+          <p className="text-base font-medium text-textMain">{message}</p>
+          <p className="text-sm text-textSoft">{elapsed > 0 ? `${elapsed}s elapsed` : "Connecting..."}</p>
         </div>
 
-        <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/40">
-          The server spins down when idle — first visit takes ~30s
+        <div className="rounded-lg border border-border bg-surface2 px-4 py-2 text-xs text-textMuted">
+          The socket service spins down when idle. First visit can take about 30 seconds.
         </div>
       </div>
     </div>
   );
 }
+

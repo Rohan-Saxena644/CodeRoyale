@@ -1,6 +1,6 @@
 export type ModeKind = "competitive" | "dev";
 
-export type MatchStatus = "waiting" | "countdown" | "active" | "ended";
+export type MatchStatus = "waiting" | "countdown" | "active" | "ended" | "finished";
 
 export type DuelLanguage =
   | "python"

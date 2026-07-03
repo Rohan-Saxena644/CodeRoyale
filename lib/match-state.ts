@@ -4,7 +4,8 @@ const transitions: Record<MatchStatus, MatchStatus[]> = {
   waiting: ["countdown"],
   countdown: ["active", "ended"],
   active: ["ended"],
-  ended: []
+  ended: [],
+  finished: []
 };
 
 export function canTransitionMatch(from: MatchStatus, to: MatchStatus) {

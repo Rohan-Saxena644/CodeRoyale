@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CodeRoyale",
-  description: "Realtime 1v1 coding duels with competitive and developer challenge modes."
+  description: "Real-time 1v1 competitive coding duels."
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="noise bg-ink font-sans text-mist">{children}</body>
+      <body className="noise bg-bg font-sans text-textMain">{children}</body>
     </html>
   );
 }

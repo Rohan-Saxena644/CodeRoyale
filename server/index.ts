@@ -120,7 +120,7 @@ async function persistNamesForJoin(
     if (role === "host") {
       await prisma.match.update({ where: { inviteCode }, data: { hostName: handle } });
     } else {
-      await prisma.match.update({ where: { inviteCode }, data: { guestName: handle, status: "waiting" } });
+      await prisma.match.update({ where: { inviteCode }, data: { guestName: handle } });
     }
   } catch {
     console.warn("[persistNamesForJoin] skipped — not found:", inviteCode);
@@ -473,6 +473,17 @@ io.on("connection", (socket) => {
 });
 
 const port = Number(process.env.PORT ?? 4000);
+httpServer.on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(
+      `Port ${port} is already in use. Stop the existing socket server or run with a different PORT.`
+    );
+    process.exit(1);
+  }
+
+  throw error;
+});
+
 httpServer.listen(port, () => {
   console.log(`CodeRoyale socket server listening on http://localhost:${port}`);
 });

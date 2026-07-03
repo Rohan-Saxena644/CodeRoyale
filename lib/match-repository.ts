@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+﻿import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createInviteCode } from "@/lib/matchmaking";
 import type { MatchConfig, MatchStatus, StoredMatch } from "@/lib/types";
@@ -11,7 +11,7 @@ const db = prisma as typeof prisma & {
       hostName: string;
       guestName: string | null;
       mode: "competitive" | "dev";
-      status: "waiting" | "countdown" | "active" | "ended";
+      status: "waiting" | "countdown" | "active" | "ended" | "finished";
       difficulty: string;
       duelLanguage: string | null;
       devCategory: string | null;
@@ -23,7 +23,7 @@ const db = prisma as typeof prisma & {
       hostName: string;
       guestName: string | null;
       mode: "competitive" | "dev";
-      status: "waiting" | "countdown" | "active" | "ended";
+      status: "waiting" | "countdown" | "active" | "ended" | "finished";
       difficulty: string;
       duelLanguage: string | null;
       devCategory: string | null;
@@ -35,7 +35,7 @@ const db = prisma as typeof prisma & {
       hostName: string;
       guestName: string | null;
       mode: "competitive" | "dev";
-      status: "waiting" | "countdown" | "active" | "ended";
+      status: "waiting" | "countdown" | "active" | "ended" | "finished";
       difficulty: string;
       duelLanguage: string | null;
       devCategory: string | null;
@@ -55,7 +55,7 @@ function mapStoredMatch(match: {
   difficulty: string;
   duelLanguage: string | null;
   devCategory: string | null;
-  status: "waiting" | "countdown" | "active" | "ended";
+  status: "waiting" | "countdown" | "active" | "ended" | "finished";
   createdAt: Date;
 }): StoredMatch {
   return {
@@ -131,3 +131,4 @@ export async function updateStoredMatchGuest(inviteCode: string, guestName: stri
 
   return mapStoredMatch(match as unknown as MatchRow);
 }
+

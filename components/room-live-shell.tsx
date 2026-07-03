@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -20,13 +20,6 @@ type RoomLiveShellProps = {
   initialCountdownEndsAt?: number;
 };
 
-type JoinPayload = {
-  roomId: string;
-  inviteCode: string;
-  role: "host" | "guest";
-  handle: string;
-};
-
 function getSocketUrl() {
   return process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
 }
@@ -45,6 +38,7 @@ export function RoomLiveShell({
 }: RoomLiveShellProps) {
   const router = useRouter();
   const socketRef = useRef<Socket | null>(null);
+  const roleRef = useRef<"host" | "guest">(viewerRole);
   const [currentViewerRole, setCurrentViewerRole] = useState<"host" | "guest">(viewerRole);
   const [presence, setPresence] = useState<RoomPresenceState>({
     roomId,
@@ -61,17 +55,16 @@ export function RoomLiveShell({
   const [isReadyPending, setIsReadyPending] = useState(false);
   const [playerLeftName, setPlayerLeftName] = useState<string | null>(null);
 
-  const joinPayload = useMemo<JoinPayload>(
-    () => ({
-      roomId,
-      inviteCode,
-      role: viewerRole,
-      handle: viewerRole === "host" ? hostName : guestName ?? "Guest",
-    }),
-    [guestName, hostName, inviteCode, roomId, viewerRole]
+  const selfHandle = useMemo(
+    () => (viewerRole === "host" ? hostName : guestName ?? "Guest"),
+    [guestName, hostName, viewerRole]
   );
 
   const isViewerReady = currentViewerRole === "host" ? presence.hostReady : presence.guestReady;
+
+  useEffect(() => {
+    roleRef.current = currentViewerRole;
+  }, [currentViewerRole]);
 
   function handleReadyToggle() {
     if (connectionState !== "connected") return;
@@ -105,7 +98,12 @@ export function RoomLiveShell({
 
     socket.on("connect", () => {
       setConnectionState("connected");
-      socket.emit("room:join", joinPayload);
+      socket.emit("room:join", {
+        roomId,
+        inviteCode,
+        role: roleRef.current,
+        handle: selfHandle,
+      });
     });
 
     socket.on("disconnect", () => {
@@ -113,6 +111,7 @@ export function RoomLiveShell({
     });
 
     socket.on("room:role-updated", (nextRole: "host" | "guest") => {
+      roleRef.current = nextRole;
       setCurrentViewerRole(nextRole);
       setIsReadyPending(false);
     });
@@ -128,7 +127,7 @@ export function RoomLiveShell({
             nextPresence.guestName ?? guestName ?? ""
           )}&mode=${config.mode}&difficulty=${config.difficulty}&track=${
             config.duelLanguage ?? config.devCategory ?? "javascript"
-          }&role=${currentViewerRole}` as Route
+          }&role=${roleRef.current}` as Route
         );
         return;
       }
@@ -147,7 +146,7 @@ export function RoomLiveShell({
     });
 
     socket.on("player:left", (payload: { name: string; role: "host" | "guest" }) => {
-      if (payload.role !== currentViewerRole) {
+      if (payload.role !== roleRef.current) {
         setPlayerLeftName(payload.name);
       }
     });
@@ -157,7 +156,7 @@ export function RoomLiveShell({
       socket.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.devCategory, config.difficulty, config.duelLanguage, config.mode, guestName, hostName, inviteCode, joinPayload, roomId, router, currentViewerRole]);
+  }, [config.devCategory, config.difficulty, config.duelLanguage, config.mode, guestName, hostName, inviteCode, roomId, router, selfHandle]);
 
   useEffect(() => {
     if (!presence.countdownEndsAt || presence.status !== "countdown") {
@@ -179,17 +178,14 @@ export function RoomLiveShell({
   return (
     <>
       {playerLeftName && (
-        <div className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-coral/40 bg-coral/10 px-5 py-3">
-          <div className="flex items-center gap-3">
-            <span className="text-lg">👋</span>
-            <p className="text-sm font-semibold text-white">
-              <span className="text-coral">{playerLeftName}</span> has left the room.
-            </p>
-          </div>
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-danger/30 bg-danger/10 px-5 py-3">
+          <p className="text-sm font-semibold text-textMain">
+            <span className="text-danger">{playerLeftName}</span> has left the room.
+          </p>
           <button
             type="button"
             onClick={() => setPlayerLeftName(null)}
-            className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/70 transition hover:bg-white/20"
+            className="rounded-lg border border-border px-3 py-1 text-xs font-semibold text-textMuted transition hover:text-textMain"
           >
             Dismiss
           </button>
@@ -214,3 +210,4 @@ export function RoomLiveShell({
     </>
   );
 }
+

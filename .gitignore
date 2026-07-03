@@ -6,3 +6,5 @@ dist
 coverage
 prisma/dev.db
 prisma/dev.db-journal
+.next-dev.log
+.socket-dev.log

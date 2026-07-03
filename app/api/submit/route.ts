@@ -176,7 +176,7 @@ export async function POST(request: Request) {
 
     const totalTests = runResults.length;
     const passedTests = runResults.filter((r) => r.passed).length;
-    const allPassed = passedTests === totalTests;
+    const allPassed = totalTests > 0 && passedTests === totalTests;
     const verdict = allPassed ? "AC" : "WA";
     const hasJudgeErrors = runResults.some((r) => r.isJudgeError);
 
@@ -187,7 +187,7 @@ export async function POST(request: Request) {
         language,
         code,
         verdict,
-        score: Math.round((passedTests / totalTests) * 100),
+        score: totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0,
         outputJson: runResults as object[],
       },
     });
