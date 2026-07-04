@@ -1,85 +1,92 @@
 # CodeRoyale
 
-Real-time 1v1 competitive coding duels. Two developers, one problem, first to pass all test cases wins.
+Real-time 1v1 competitive coding duels. Two developers solve the same problem, watch each other code live, and race to the first accepted submission.
 
----
+## Overview
 
-## What it is
+CodeRoyale is a full-stack competitive coding platform built around real-time head-to-head matches. A host creates a private room, shares an invite code, both players ready up, and the app drops the same algorithm problem for both sides. Code updates stream over WebSockets, submissions are judged remotely, and the first player to pass all test cases wins.
 
-CodeRoyale is a full-stack web app that puts two developers head-to-head on the same algorithm problem. Both players write code in a live shared editor — you see your opponent's code update in real time as they type. The first player to submit a solution that passes all test cases wins the match. If neither player solves it before the 30-minute timer runs out, the player with the higher partial score wins.
+This is not a CRUD dashboard. The core challenge is coordinating live room presence, synchronized editor state, countdown timers, server-side judging, hidden test cases, and match resolution across a separate Next.js app and persistent Socket.IO server.
 
----
+## Key features
+
+- Invite-based 1v1 coding rooms with no signup required
+- Real-time opponent code streaming with Socket.IO
+- Pre-game lobby with ready checks and countdown
+- Monaco-powered coding workspace
+- Support for JavaScript, Python, C++, Go, Rust, and Java
+- Curated problem bank with 100+ algorithm problems
+- Server-side submissions through Judge0
+- Hidden test cases and partial scoring
+- Timeout winner resolution by best score
+- Separate production-ready Socket.IO server for WebSocket state
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 15 (App Router), React 18, TypeScript |
+| Frontend | Next.js 15 App Router, React 18, TypeScript |
 | Editor | Monaco Editor (`@monaco-editor/react`) |
-| Real-time | Socket.IO 4 over WebSocket (standalone Express server) |
-| Database | PostgreSQL via Neon (serverless), Prisma ORM |
-| Code execution | Judge0 API (sandboxed remote execution) |
+| Real-time | Socket.IO 4 over WebSocket, standalone Express server |
+| Database | PostgreSQL via Neon, Prisma ORM |
+| Code execution | Judge0 CE API |
 | Styling | Tailwind CSS |
 | Validation | Zod |
-| Deployment | Vercel (Next.js) + Render (Socket.IO server) |
-
----
+| Deployment | Vercel for Next.js, Render for Socket.IO server |
 
 ## How a match works
 
-1. **Create a room** — pick language (`JavaScript`, `Python`, `C++`, `Go`, `Rust`, or `Java`) and difficulty (`easy` / `medium` / `hard`). A 4-character invite code is generated.
-2. **Opponent joins** — they enter the invite code on `/match`. Both players land in a pre-game lobby.
-3. **Ready check** — both players click Ready. A 5-second countdown fires.
-4. **Problem drops** — a curated algorithm problem is assigned to the match. Both players see it simultaneously.
-5. **Duel** — write your solution. Your opponent's keystrokes stream into their editor panel on your screen in real time via Socket.IO.
-6. **Submit** — code is sent to Judge0. It runs against all test cases (including hidden ones). First player to reach AC wins. On timeout, highest partial score wins.
-
----
+1. **Create a room** - choose a language and difficulty. The app generates an invite code.
+2. **Opponent joins** - the second player enters the invite code and lands in the lobby.
+3. **Ready check** - both players mark themselves ready.
+4. **Countdown** - a short countdown starts once both players are ready.
+5. **Problem drops** - both players receive the same algorithm problem.
+6. **Live duel** - each player writes code while seeing the opponent editor update in real time.
+7. **Submit** - code is judged against visible and hidden test cases.
+8. **Winner is resolved** - first accepted submission wins. If time expires, highest partial score wins.
 
 ## Project structure
 
-```
+```text
 coderoyale/
 ├── app/
-│   ├── page.tsx                  # Landing page (live match count from DB)
+│   ├── page.tsx                  # Landing page
 │   ├── match/page.tsx            # Create / join room
 │   ├── room/[roomId]/page.tsx    # Pre-game lobby
 │   ├── duel/[roomId]/page.tsx    # Live duel workspace
 │   └── api/
-│       ├── match/route.ts        # Create match (rate limited)
-│       ├── match/join/route.ts   # Join by invite code (rate limited)
-│       ├── run/route.ts          # Test-run code (rate limited)
-│       ├── submit/route.ts       # Final submission + verdict (rate limited)
+│       ├── match/route.ts        # Create match
+│       ├── match/join/route.ts   # Join match by invite code
+│       ├── run/route.ts          # Run code through judge driver
+│       ├── submit/route.ts       # Final submission and verdict
 │       ├── problem/generate/     # Assign problem to match
-│       └── health/route.ts       # Web service health + live stats
+│       └── health/route.ts       # App health endpoint
 ├── components/
-│   ├── duel-live-shell.tsx       # Main duel UI (editors, timer, emotes, result overlay)
+│   ├── duel-live-shell.tsx       # Duel UI, editors, timer, results
 │   ├── room-live-shell.tsx       # Lobby socket client
-│   ├── room-shell.tsx            # Lobby UI (ready check, config display)
-│   ├── server-wake.tsx           # Polls socket server until it's warm
+│   ├── room-shell.tsx            # Lobby dashboard UI
+│   ├── server-wake.tsx           # Polls socket server until ready
 │   ├── match-form.tsx            # Room creation form
 │   └── join-room-form.tsx        # Join by invite code form
 ├── server/
-│   └── index.ts                  # Socket.IO server (presence, code sync, emotes, timers)
+│   └── index.ts                  # Socket.IO server: presence, code sync, timers
 ├── lib/
-│   ├── judge.ts                  # Judge0 driver builder for all 6 languages
-│   ├── match-repository.ts       # Prisma match CRUD
+│   ├── judge.ts                  # Judge0 driver builder for all supported languages
+│   ├── match-repository.ts       # Prisma match helpers
 │   ├── match-state.ts            # Match status state machine
-│   ├── problem-seeds.ts          # Curated problem bank (100+ problems)
+│   ├── problem-seeds.ts          # Curated problem bank
 │   └── types.ts                  # Shared TypeScript types
 └── prisma/
     └── schema.prisma             # Match, Problem, Submission, User models
 ```
-
----
 
 ## Running locally
 
 ### Prerequisites
 
 - Node.js 20+
-- A PostgreSQL database (Neon free tier works)
-- A Judge0 API key (RapidAPI free tier works)
+- PostgreSQL database
+- Internet access for Judge0 CE requests
 
 ### 1. Clone and install
 
@@ -94,24 +101,21 @@ npm install
 Create `.env.local` in the project root:
 
 ```env
-# Database (Neon or any PostgreSQL)
+# Database
 DATABASE_URL=postgresql://...
 DIRECT_URL=postgresql://...
 
-# Judge0 (via RapidAPI)
-JUDGE0_API_URL=https://judge0-ce.p.rapidapi.com
-JUDGE0_API_KEY=your_key_here
-JUDGE0_API_HOST=judge0-ce.p.rapidapi.com
-
-# Socket server URL (local dev)
+# Socket server URL for the browser
 NEXT_PUBLIC_SOCKET_URL=http://localhost:4000
 
-# Shared secret between Next.js and socket server (generate with: openssl rand -hex 32)
-INTERNAL_SECRET=your_secret_here
-
-# App URL (used by socket server for internal callbacks)
+# App URL used by the socket server for internal callbacks
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Shared secret between Next.js and the socket server
+INTERNAL_SECRET=your_secret_here
 ```
+
+The current judge implementation uses the public Judge0 CE endpoint in `lib/judge.ts`.
 
 ### 3. Set up the database
 
@@ -122,41 +126,48 @@ npx prisma generate
 
 ### 4. Start both servers
 
-In one terminal — the Next.js app:
+In one terminal, start the Next.js app:
 
 ```bash
 npm run dev
 ```
 
-In a second terminal — the Socket.IO server:
+In a second terminal, start the Socket.IO server:
 
 ```bash
 npm run socket
 ```
 
-Open `http://localhost:3000`. Open a second browser tab or window and create + join a room to test a full match.
+Open `http://localhost:3000`, create a room, then join it from another browser tab or window.
 
----
+If port `4000` is already in use, stop the existing socket process or run the socket server with another `PORT`.
 
 ## Architecture notes
 
 ### Why a separate Socket.IO server?
 
-Next.js serverless functions are stateless and cannot hold WebSocket connections open. The Socket.IO server runs as a persistent Express/Node process (on Render in production) that owns all in-memory room presence state, countdown timers, and code sync. The Next.js app talks to it over HTTP for internal match-ended notifications.
+The Next.js app handles pages, API routes, persistence, and submission judging. The Socket.IO server is a separate long-running Node process because WebSocket presence, live code sync, countdown timers, and room broadcasts need persistent in-memory runtime state.
+
+In production, this means the Next.js app and socket server should be deployed as separate services.
 
 ### Code execution
 
-Submissions are sent to Judge0, a sandboxed remote code execution service. The `lib/judge.ts` driver wraps user-submitted function code in a per-language harness that calls the function with test case inputs and prints the return value as JSON. The submit route retries up to 3 times with backoff on judge errors before marking a test as a judge error (not a wrong answer).
+Submissions are wrapped in a language-specific driver from `lib/judge.ts` and sent to Judge0 CE. The driver calls the submitted function with test case inputs and prints a JSON-compatible return value. Final submissions are evaluated server-side against visible and hidden tests.
+
+### Match state
+
+The app stores durable match, problem, and submission records in PostgreSQL. Live presence, code sync, countdown timers, and active room state are owned by the Socket.IO process. This keeps the real-time loop fast, but it also means a production deployment should run the socket server as a persistent service.
 
 ### Anti-cheat
 
-- Copy/paste is blocked at the Monaco editor level (keyboard shortcuts and DOM events both intercepted).
-- The opponent code panel is read-only with no copy/paste access.
-- Final submissions run server-side in Judge0's sandbox — the in-browser run button only tests local cases.
+- Copy, paste, and cut are blocked inside the writable Monaco editor.
+- The opponent editor is read-only.
+- Final verdicts are computed server-side through Judge0.
+- Hidden tests are never sent to the client.
 
 ### Rate limiting
 
-All mutation endpoints use in-memory sliding window rate limiting:
+Mutation endpoints use simple in-memory sliding-window rate limiting:
 
 | Endpoint | Limit |
 |---|---|
@@ -164,27 +175,28 @@ All mutation endpoints use in-memory sliding window rate limiting:
 | `POST /api/match/join` | 10 joins / min / IP |
 | `POST /api/run` | 20 runs / min / IP |
 | `POST /api/submit` | 5 submits / min / player |
-| Socket emotes | 1 per 1.5s per socket |
-
----
 
 ## Deployment
 
-### Next.js → Vercel
+### Next.js on Vercel
 
-Push to GitHub and connect the repo to Vercel. Set all env vars in the Vercel dashboard. Make sure `NEXT_PUBLIC_SOCKET_URL` points to your Render socket server URL.
+Deploy the Next.js app to Vercel and set the database and socket environment variables. `NEXT_PUBLIC_SOCKET_URL` must point to the deployed Socket.IO server.
 
-### Socket server → Render
+### Socket.IO server on Render
 
-Create a new Web Service on Render pointing to the same repo. Set the start command to:
+Deploy the same repo as a Render Web Service and use:
 
 ```bash
 npx tsx server/index.ts
 ```
 
-Set the `PORT` env var (Render provides this automatically). Set `NEXT_PUBLIC_APP_URL` to your Vercel deployment URL so the socket server can call back into the Next.js API for problem generation.
+Set `NEXT_PUBLIC_APP_URL` to the deployed Vercel app URL so the socket server can call back into the app for problem generation and match events.
 
----
+## Resume highlights
+
+- Built a full-stack real-time coding duel platform with Next.js, TypeScript, Socket.IO, Prisma, PostgreSQL, Monaco Editor, and Judge0.
+- Implemented invite-based rooms, live opponent code sync, ready checks, countdown timers, hidden test judging, partial scoring, and winner resolution.
+- Designed a split deployment architecture with a serverless Next.js frontend/API and a persistent WebSocket server.
 
 ## License
 
