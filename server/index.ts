@@ -34,8 +34,31 @@ const roomPresence = new Map<string, RoomPresenceState>();
 const countdownTimers = new Map<string, NodeJS.Timeout>();
 const roomCodeState = new Map<string, { hostCode: string; guestCode: string }>();
 const emoteRateLimit = new Map<string, number>();
+const departureTimers = new Map<string, NodeJS.Timeout>();
+const leftRoles = new Set<string>();
 
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET ?? "";
+const DISCONNECT_GRACE_MS = Number(process.env.SOCKET_DISCONNECT_GRACE_MS ?? 10_000);
+
+function presenceKey(roomId: string, role: "host" | "guest") {
+  return `${roomId}:${role}`;
+}
+
+function cancelPendingDeparture(roomId: string, role: "host" | "guest") {
+  const key = presenceKey(roomId, role);
+  const timer = departureTimers.get(key);
+  if (!timer) return false;
+  clearTimeout(timer);
+  departureTimers.delete(key);
+  return true;
+}
+
+function markRoleReturned(roomId: string, role: "host" | "guest") {
+  const key = presenceKey(roomId, role);
+  const hadPendingDeparture = cancelPendingDeparture(roomId, role);
+  const hadLeft = leftRoles.delete(key);
+  return hadPendingDeparture || hadLeft;
+}
 
 function upsertRoomPresence(
   roomId: string,
@@ -82,6 +105,11 @@ function clearRoomPresence(
         };
   if (!nextState.hostName && !nextState.guestName) {
     roomPresence.delete(roomId);
+    roomCodeState.delete(roomId);
+    cancelPendingDeparture(roomId, "host");
+    cancelPendingDeparture(roomId, "guest");
+    leftRoles.delete(presenceKey(roomId, "host"));
+    leftRoles.delete(presenceKey(roomId, "guest"));
     return {
       roomId,
       inviteCode: current.inviteCode,
@@ -177,18 +205,27 @@ async function promoteRemainingGuest(
   return promotedState;
 }
 
-async function handleRoomDeparture(
-  socket: Parameters<Parameters<typeof io.on>[1]>[0]
+async function applyRoomDeparture(
+  roomId: string,
+  role: "host" | "guest",
+  inviteCode: string
 ) {
-  const roomId = socket.data.roomId as string | undefined;
-  const role = socket.data.role as "host" | "guest" | undefined;
-  const inviteCode = socket.data.inviteCode as string | undefined;
-  if (!roomId || !role || !inviteCode || socket.data.departureHandled) return;
-  socket.data.departureHandled = true;
+  const key = presenceKey(roomId, role);
+  departureTimers.delete(key);
+
   const current = roomPresence.get(roomId);
   if (!current) return;
-  if (current.status === "active") return;
+
+  const leaverName = role === "host" ? current.hostName : current.guestName;
+
+  if (current.status === "active") {
+    leftRoles.add(presenceKey(roomId, role));
+    if (leaverName) io.to(roomId).emit("player:left", { name: leaverName, role });
+    return;
+  }
+
   clearCountdown(roomId);
+
   let nextState: RoomPresenceState | null = null;
   if (role === "host" && current.guestName) {
     nextState = await promoteRemainingGuest(roomId, inviteCode, current);
@@ -197,11 +234,37 @@ async function handleRoomDeparture(
     nextState = clearRoomPresence(roomId, role);
     if (nextState) await persistRoomAfterDisconnect(inviteCode, nextState);
   }
+
   if (nextState) {
     emitRoomState(roomId, { ...nextState, inviteCode });
-    const leaverName = role === "host" ? current.hostName : current.guestName;
     if (leaverName) io.to(roomId).emit("player:left", { name: leaverName, role });
   }
+}
+
+async function handleRoomDeparture(
+  socket: Parameters<Parameters<typeof io.on>[1]>[0],
+  options: { immediate?: boolean } = {}
+) {
+  const roomId = socket.data.roomId as string | undefined;
+  const role = socket.data.role as "host" | "guest" | undefined;
+  const inviteCode = socket.data.inviteCode as string | undefined;
+  if (!roomId || !role || !inviteCode || socket.data.departureHandled) return;
+  socket.data.departureHandled = true;
+
+  cancelPendingDeparture(roomId, role);
+
+  if (options.immediate) {
+    await applyRoomDeparture(roomId, role, inviteCode);
+    return;
+  }
+
+  const key = presenceKey(roomId, role);
+  const timer = setTimeout(() => {
+    applyRoomDeparture(roomId, role, inviteCode).catch((err) => {
+      console.error("[socket] deferred departure failed:", err);
+    });
+  }, DISCONNECT_GRACE_MS);
+  departureTimers.set(key, timer);
 }
 
 function scheduleCountdown(
@@ -288,6 +351,7 @@ io.on("connection", (socket) => {
       role: "host" | "guest";
       handle: string;
     }) => {
+      const returned = markRoleReturned(payload.roomId, payload.role);
       socket.join(payload.roomId);
       socket.data.roomId = payload.roomId;
       socket.data.role = payload.role;
@@ -300,6 +364,12 @@ io.on("connection", (socket) => {
         payload.handle
       );
       emitRoomState(payload.roomId, nextState);
+      if (returned) {
+        io.to(payload.roomId).emit("player:returned", {
+          name: payload.handle,
+          role: payload.role,
+        });
+      }
     }
   );
 
@@ -350,27 +420,44 @@ io.on("connection", (socket) => {
   );
 
   socket.on("room:leave", async (done?: () => void) => {
-    await handleRoomDeparture(socket);
+    await handleRoomDeparture(socket, { immediate: true });
     done?.();
     socket.disconnect(true);
   });
 
   socket.on(
     "duel:join",
-    async (payload: { roomId: string; role: "host" | "guest"; code: string }) => {
+    async (payload: { roomId: string; inviteCode?: string; role: "host" | "guest"; code: string }) => {
+      const returned = markRoleReturned(payload.roomId, payload.role);
       socket.join(payload.roomId);
       socket.data.roomId = payload.roomId;
       socket.data.role = payload.role;
+      if (payload.inviteCode) socket.data.inviteCode = payload.inviteCode;
       const current = getRoomCodeState(payload.roomId);
+      const existingOwnCode = payload.role === "host" ? current.hostCode : current.guestCode;
       const nextState =
         payload.role === "host"
-          ? { ...current, hostCode: payload.code }
-          : { ...current, guestCode: payload.code };
+          ? { ...current, hostCode: existingOwnCode || payload.code }
+          : { ...current, guestCode: existingOwnCode || payload.code };
       roomCodeState.set(payload.roomId, nextState);
+      if (existingOwnCode) {
+        socket.emit("code:restore", { code: existingOwnCode });
+      }
+      const opponentCode = payload.role === "host" ? nextState.guestCode : nextState.hostCode;
+      const opponentRole = payload.role === "host" ? "guest" : "host";
+      if (opponentCode) {
+        socket.emit("code:state", {
+          role: opponentRole,
+          code: opponentCode,
+        });
+      }
       socket.to(payload.roomId).emit("code:state", {
         role: payload.role,
-        code: payload.code,
+        code: payload.role === "host" ? nextState.hostCode : nextState.guestCode,
       });
+      if (returned) {
+        io.to(payload.roomId).emit("player:returned", { role: payload.role });
+      }
       try {
         const match = await prisma.match.findUnique({
           where: { id: payload.roomId },

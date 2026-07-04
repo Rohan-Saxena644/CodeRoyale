@@ -150,6 +150,11 @@ export function RoomLiveShell({
         setPlayerLeftName(payload.name);
       }
     });
+    socket.on("player:returned", (payload: { role: "host" | "guest" }) => {
+      if (payload.role !== roleRef.current) {
+        setPlayerLeftName(null);
+      }
+    });
 
     return () => {
       socketRef.current = null;

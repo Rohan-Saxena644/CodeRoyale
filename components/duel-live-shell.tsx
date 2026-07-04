@@ -187,6 +187,8 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
   const socketRef = useRef<Socket | null>(null);
   const syncTimeoutRef = useRef<number | null>(null);
   const roleRef = useRef<"host" | "guest">(viewerRole);
+  const codeRestoredRef = useRef(false);
+  const opponentCodeSeenRef = useRef(false);
 
   const editorLanguage = getEditorLanguage(config);
   const starterCode = starterTemplates[editorLanguage] ?? starterTemplates.default;
@@ -252,19 +254,30 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
     });
     socket.on("code:state", (payload: { role: "host" | "guest"; code: string }) => {
       if (payload.role === roleRef.current) return;
+      opponentCodeSeenRef.current = true;
       setOpponentCode(payload.code);
       setOpponentTouched(true);
+    });
+    socket.on("code:restore", (payload: { code: string }) => {
+      codeRestoredRef.current = true;
+      setMyCode(payload.code);
     });
     socket.on("problem:ready", (incoming: Problem) => {
       setProblem(incoming);
       const sig = incoming.rawJson?.functionSignature;
       if (!sig) return;
       const stub = buildStub(editorLanguage, sig.name, sig.params, sig.returnType);
-      setMyCode(stub);
-      setOpponentCode(stub);
-      setTimeout(() => {
-        socketRef.current?.emit("code:sync", { roomId, inviteCode, role: roleRef.current, code: stub });
-      }, 150);
+      if (!codeRestoredRef.current) {
+        setMyCode(stub);
+      }
+      if (!opponentCodeSeenRef.current) {
+        setOpponentCode(stub);
+      }
+      if (!codeRestoredRef.current) {
+        setTimeout(() => {
+          socketRef.current?.emit("code:sync", { roomId, inviteCode, role: roleRef.current, code: stub });
+        }, 150);
+      }
     });
     socket.on("match:ended", (payload: { winnerRole: "host" | "guest" | "draw"; reason?: string }) => {
       setMatchResult({
@@ -276,6 +289,9 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
     });
     socket.on("player:left", (payload: { name: string; role: "host" | "guest" }) => {
       if (payload.role !== roleRef.current) setOpponentLeft(payload.name);
+    });
+    socket.on("player:returned", (payload: { role: "host" | "guest" }) => {
+      if (payload.role !== roleRef.current) setOpponentLeft(null);
     });
 
     return () => {
@@ -322,7 +338,7 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
   const timeDisplay = `${String(Math.floor(timeLeft / 60)).padStart(2, "0")}:${String(timeLeft % 60).padStart(2, "0")}`;
   const myStatus = matchResult ? "Ended" : verdict?.verdict === "AC" ? "Accepted" : submitting ? "Running" : myCode.trim() ? "Editing" : "Waiting";
   const myTone: StatusTone = myStatus === "Accepted" ? "success" : myStatus === "Running" ? "warning" : myStatus === "Editing" ? "primary" : "neutral";
-  const opponentStatus = opponentLeft ? "Disconnected" : opponentTouched ? "Editing" : connectionState === "connected" ? "Connected" : "Waiting";
+  const opponentStatus = opponentLeft ? "Left" : opponentTouched ? "Editing" : connectionState === "connected" ? "Connected" : "Waiting";
   const opponentTone: StatusTone = opponentLeft ? "danger" : opponentStatus === "Editing" ? "primary" : opponentStatus === "Connected" ? "success" : "neutral";
   const connectionTone: StatusTone = connectionState === "connected" ? "success" : connectionState === "connecting" ? "warning" : "danger";
 
