@@ -1,39 +1,24 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Header } from "@/components/header";
+import { ServiceStatus } from "@/components/service-status";
+import { useServiceHealth } from "@/components/use-service-health";
+import { UiIcon } from "@/components/ui-icon";
 
 export function ServerWake({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<"waking" | "ready" | "slow">("waking");
+  const health = useServiceHealth();
+  const [browsing, setBrowsing] = useState(false);
+  const [connectedOnce, setConnectedOnce] = useState(false);
+  const socketReady = health.services.socket === "operational";
 
-  useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
-    let cancelled = false;
-    let timeout: ReturnType<typeof setTimeout>;
-    const started = Date.now();
+  // Once connected, later reconnects should not interrupt an active visit.
+  useEffect(() => { if (socketReady) setConnectedOnce(true); }, [socketReady]);
 
-    async function ping() {
-      try {
-        const res = await fetch(`${socketUrl}/health`, { signal: AbortSignal.timeout(5000), cache: "no-store" });
-        if (cancelled) return;
-        if (res.ok) { setStatus("ready"); return; }
-      } catch { /* Keep the page usable while the room service starts. */ }
-      if (cancelled) return;
-      if (Date.now() - started > 60000) setStatus("slow");
-      timeout = setTimeout(ping, 5000);
-    }
+  if (!socketReady && !browsing && !connectedOnce) {
+    return <main className="status-backdrop min-h-screen"><Header /><ServiceStatus health={health} wake onBrowse={() => setBrowsing(true)} /><p className="px-6 pb-8 text-center text-xs text-textSoft">Your next challenge is on the other side.</p></main>;
+  }
 
-    void ping();
-    return () => { cancelled = true; clearTimeout(timeout); };
-  }, []);
-
-  return (
-    <>
-      {status !== "ready" && (
-        <div role="status" className="border-b border-borderSoft bg-surface px-6 py-2 text-center text-xs text-textMuted">
-          {status === "slow" ? "The room service is taking longer to connect. You can keep browsing while we retry." : "Getting the arena ready. You can explore while we connect."}
-        </div>
-      )}
-      {children}
-    </>
-  );
+  return <>{!socketReady && <div role="status" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b border-primary/10 bg-primary/5 px-6 py-2.5 text-xs text-textMuted"><span className="inline-flex items-center gap-2"><UiIcon name="clock" className="h-3.5 w-3.5 text-primary" />The live arena is still connecting. You can keep exploring.</span><Link href="/health" className="font-medium text-primary underline underline-offset-4">View service status</Link></div>}{children}</>;
 }

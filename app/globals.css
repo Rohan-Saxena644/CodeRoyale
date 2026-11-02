@@ -58,6 +58,23 @@ pre, code {
   font-variant-ligatures: none;
 }
 
+.home-hero {
+  background-image: radial-gradient(ellipse at 85% 35%, #edf3ff 0%, transparent 55%);
+}
+
+.status-backdrop {
+  background-color: #f8faff;
+  background-image: radial-gradient(ellipse at 15% 35%, #eaf1ff 0%, transparent 55%);
+}
+
+.arena-preview {
+  transform: rotate(-1deg);
+}
+
+@media (max-width: 640px) {
+  .arena-preview { transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after {

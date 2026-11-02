@@ -16,6 +16,7 @@ export function Header() {
       <nav aria-label="Main navigation" className="flex items-center gap-6 text-sm text-textMuted">
         <Link href="/#how-it-works" className="hidden transition hover:text-primary md:block">How it works</Link>
         <Link href="/#modes" className="hidden transition hover:text-primary md:block">Languages</Link>
+        <Link href="/health" className="hidden transition hover:text-primary md:block">Status</Link>
         <Link
           href="/match"
           className="rounded-lg border border-border bg-surface2 px-4 py-2 font-semibold text-textMain transition hover:border-primary hover:text-primary"

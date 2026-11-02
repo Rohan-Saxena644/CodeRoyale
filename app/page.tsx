@@ -1,165 +1,68 @@
 ﻿import Link from "next/link";
 import { Header } from "@/components/header";
 import { ServerWake } from "@/components/server-wake";
-import { prisma } from "@/lib/prisma";
+import { ArenaPreview } from "@/components/arena-preview";
+import { UiIcon } from "@/components/ui-icon";
 
-async function getMatchCount(): Promise<number> {
-  try {
-    return await prisma.match.count({ where: { status: "finished" } });
-  } catch {
-    return 0;
-  }
-}
+const steps = [
+  { title: "Set the challenge", text: "Pick a language and difficulty. Create a private room in a few clicks.", icon: "code" as const },
+  { title: "Bring your opponent", text: "Share your invite code. Get ready, and the same problem drops for both of you.", icon: "link" as const },
+  { title: "Race to Accepted", text: "Write your solution, follow their code live, and submit. First to pass every test wins.", icon: "bolt" as const },
+];
+const languages = [
+  ["JS", "JavaScript"], ["Py", "Python"], ["C++", "C++"], ["Go", "Go"], ["Rs", "Rust"], ["Jv", "Java"],
+];
 
-const stats = ["100+ Problems", "6 Languages", "Real-time Sync", "No Signup"];
-
-function StatusBadge({
-  children,
-  tone = "neutral",
-}: {
-  children: React.ReactNode;
-  tone?: "neutral" | "primary" | "success" | "warning";
-}) {
-  const classes = {
-    neutral: "border-borderSoft bg-surface3 text-textMuted",
-    primary: "border-primary/30 bg-primary/10 text-primary",
-    success: "border-success/30 bg-success/10 text-success",
-    warning: "border-warning/30 bg-warning/10 text-warning",
-  };
-
-  return (
-    <span className={`rounded-md border px-2 py-1 text-xs font-medium ${classes[tone]}`}>
-      {children}
-    </span>
-  );
-}
-
-export default async function HomePage() {
-  const finishedMatches = await getMatchCount();
-  const matchDisplay = finishedMatches > 0 ? `${finishedMatches}+ duels completed` : "Live duel ready";
-
+export default function HomePage() {
   return (
     <ServerWake>
-      <main className="overflow-x-hidden pb-16">
-        <Header />
-
-        <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 py-16 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-24">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" />
-              A little competition. Better code.
+      <main className="overflow-x-hidden">
+        <div className="home-hero border-b border-borderSoft bg-white">
+          <Header />
+          <section className="mx-auto grid max-w-7xl items-center gap-14 px-6 pb-16 pt-14 lg:grid-cols-[1fr_1fr] lg:gap-16 lg:px-8 lg:pb-24 lg:pt-20">
+            <div className="min-w-0">
+              <p className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-white px-3 py-1.5 text-xs font-medium text-primary"><UiIcon name="bolt" className="h-3.5 w-3.5" />A friendly rivalry starts here</p>
+              <h1 className="mt-6 text-[clamp(2.8rem,5.2vw,4.6rem)] font-semibold leading-[1.08] tracking-[-0.055em] text-textMain">Good friends.<br />Great rivals.<br /><span className="text-primary">Better coders.</span></h1>
+              <p className="mt-6 max-w-md text-base leading-7 text-textMuted">One problem. Two developers. A live coding duel that turns your next practice session into a little competition.</p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link href="/match" className="inline-flex items-center justify-center gap-3 rounded-lg bg-primary px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-primaryHover">Create a duel<UiIcon name="arrow" className="h-4 w-4" /></Link>
+                <Link href="/match#join" className="inline-flex items-center justify-center rounded-lg border border-border bg-white px-5 py-3.5 text-sm font-semibold text-textMain transition hover:border-primary/40 hover:bg-bgSoft">Join with a code</Link>
+              </div>
+              <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-textSoft">{["No signup", "Private rooms", "Just you and your code"].map(item => <span key={item} className="inline-flex items-center gap-1.5"><UiIcon name="check" className="h-3.5 w-3.5 text-primary" />{item}</span>)}</div>
             </div>
-            <h1 className="mt-6 max-w-3xl text-5xl font-semibold leading-[1.12] tracking-tight text-textMain md:text-6xl">
-              One problem.<br />Two coders.<br /><span className="text-primary">First to Accepted.</span>
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-textMuted md:text-lg">
-              Challenge a friend to a live coding duel. Solve the same problem, follow their progress, and race to pass every test.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/match" className="rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primaryHover">
-                Start a duel
-              </Link>
-              <Link href="/match#join" className="rounded-lg border border-border bg-surface px-5 py-3 text-sm font-semibold text-primary transition hover:border-primary/70">Join with a code</Link>
+            <div className="relative min-w-0 lg:pt-6">
+              <div className="mb-4 flex items-center justify-between px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-textSoft"><span>One shared challenge</span><span>Two ways to solve it</span></div>
+              <ArenaPreview />
+              <p className="mt-5 text-center text-xs text-textSoft">Your editor. Their progress. Every second counts.</p>
             </div>
-            <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm text-textSoft">
-              <span>No account needed</span>
-              <span>Private rooms</span>
-              <span>{matchDisplay}</span>
-            </div>
+          </section>
+          <div className="mx-auto grid max-w-7xl grid-cols-2 gap-y-5 border-t border-borderSoft px-6 py-6 sm:grid-cols-4 lg:px-8">
+            {[["100+", "curated problems"], ["6", "languages to choose from"], ["1 vs 1", "real-time competition"], ["Zero", "signup friction"]].map(([value, label]) => <div key={label} className="text-center sm:border-r sm:border-borderSoft sm:last:border-r-0"><span className="block text-xl font-semibold tracking-tight text-textMain">{value}</span><span className="mt-0.5 block text-xs text-textSoft">{label}</span></div>)}
           </div>
+        </div>
 
-          <div className="rounded-2xl border border-border bg-surface p-5 shadow-card sm:p-6">
-            <div className="flex items-center justify-between border-b border-borderSoft pb-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-primary">Inside the arena · Preview</p>
-                <h2 className="mt-1 text-lg font-semibold text-textMain">Minimum Window Substring</h2>
-              </div>
-              <div className="rounded-lg border border-border bg-bgSoft px-3 py-2 font-mono text-sm text-textMain">18:42</div>
-            </div>
-            <div className="grid gap-3 py-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-borderSoft bg-bgSoft p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-textMain">You</p>
-                  <StatusBadge tone="primary">Running</StatusBadge>
-                </div>
-                <div className="mt-4 h-2 rounded-full bg-surface3"><div className="h-2 w-3/4 rounded-full bg-primary" /></div>
-                <p className="mt-3 text-xs text-textSoft">12 / 16 tests passed</p>
-              </div>
-              <div className="rounded-lg border border-borderSoft bg-bgSoft p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-textMain">Opponent</p>
-                  <StatusBadge>Editing</StatusBadge>
-                </div>
-                <div className="mt-4 h-2 rounded-full bg-surface3"><div className="h-2 w-1/2 rounded-full bg-textSoft" /></div>
-                <p className="mt-3 text-xs text-textSoft">8 / 16 tests passed</p>
-              </div>
-            </div>
-            <div className="rounded-lg border border-borderSoft bg-editorBg p-4 font-mono text-xs text-textMuted">
-              <div className="flex items-center justify-between">
-                <span>submission.log</span>
-                <StatusBadge tone="success">Accepted</StatusBadge>
-              </div>
-              <pre className="mt-3 overflow-hidden text-textSoft">{`case 14 passed
-case 15 passed
-case 16 passed
-verdict: Accepted`}</pre>
-            </div>
+        <section id="how-it-works" className="mx-auto max-w-7xl px-6 py-16 lg:px-8 lg:py-20">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Less setup. More solving.</p><h2 className="mt-3 text-3xl font-semibold tracking-tight text-textMain">From invite to rivalry.</h2></div>
+            <p className="max-w-sm text-sm leading-6 text-textMuted">A simple format that keeps the focus on the problem in front of you.</p>
+          </div>
+          <ol className="mt-9 grid gap-6 md:grid-cols-3">
+            {steps.map((step, i) => <li key={step.title} className="relative rounded-xl border border-border bg-white p-6"><div className="flex items-center justify-between"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/5 text-primary"><UiIcon name={step.icon} className="h-5 w-5" /></span><span className="font-mono text-xs text-textSoft">0{i + 1}</span></div><h3 className="mt-6 text-lg font-semibold tracking-tight text-textMain">{step.title}</h3><p className="mt-2 text-sm leading-6 text-textMuted">{step.text}</p></li>)}
+          </ol>
+        </section>
+
+        <section id="modes" className="border-y border-borderSoft bg-white">
+          <div className="mx-auto grid max-w-7xl gap-8 px-6 py-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-center lg:px-8">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Play to your strengths</p><h2 className="mt-3 text-2xl font-semibold tracking-tight text-textMain">Your favorite language is invited.</h2><p className="mt-3 max-w-sm text-sm leading-6 text-textMuted">Choose your language when you create a room. Both players get the same challenge and test cases.</p></div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{languages.map(([short, name]) => <div key={name} className="flex items-center gap-3 rounded-lg border border-borderSoft px-4 py-4"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-bgSoft font-mono text-xs font-semibold text-primary">{short}</span><span className="text-sm font-medium text-textMain">{name}</span></div>)}</div>
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="grid divide-y divide-borderSoft rounded-xl border border-border bg-surface2 sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-            {stats.map((item) => (
-              <div key={item} className="px-5 py-4 text-center text-sm font-medium text-textMuted">{item}</div>
-            ))}
-          </div>
+        <section className="mx-auto max-w-7xl px-6 py-16 lg:px-8">
+          <div className="flex flex-col items-start justify-between gap-6 rounded-2xl border border-primary/15 bg-[#edf3ff] px-7 py-9 sm:px-10 md:flex-row md:items-center"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Your next practice session</p><h2 className="mt-3 text-2xl font-semibold tracking-tight text-textMain sm:text-3xl">Make it a friendly competition.</h2><p className="mt-2 text-sm text-textMuted">Send the invite. Settle it in the editor.</p></div><Link href="/match" className="inline-flex shrink-0 items-center gap-3 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primaryHover">Let’s duel<UiIcon name="arrow" className="h-4 w-4" /></Link></div>
         </section>
-
-        <section id="how-it-works" className="mx-auto mt-16 max-w-7xl px-6 lg:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">How it works</p>
-          <h2 className="mt-2 text-2xl font-semibold text-textMain">From room to verdict</h2>
-          <div className="mt-6 grid gap-3 md:grid-cols-4">
-            {["Create a room", "Share invite code", "Solve together", "First Accepted wins"].map((title, index) => (
-              <div key={title} className="rounded-xl border border-border bg-surface p-5">
-                <p className="font-mono text-xs text-textSoft">0{index + 1}</p>
-                <h3 className="mt-3 text-base font-semibold text-textMain">{title}</h3>
-                <p className="mt-2 text-sm leading-6 text-textMuted">
-                  {index === 0 && "Choose difficulty and language, then create a private room."}
-                  {index === 1 && "Send the invite code to your opponent so both players sync."}
-                  {index === 2 && "Both editors receive the same generated problem and live code updates."}
-                  {index === 3 && "Submit against the judge. The first all-passing result wins."}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section id="modes" className="mx-auto mt-16 max-w-7xl px-6 lg:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Supported</p>
-          <h2 className="mt-2 text-2xl font-semibold text-textMain">Your language. Your approach.</h2>
-          <p className="mt-2 text-sm text-textMuted">Six languages, the same challenge. Pick your favorite when you create a room.</p>
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {["JavaScript", "Python", "C++", "Go", "Rust", "Java"].map((lang) => (
-              <div key={lang} className="rounded-xl border border-border bg-surface px-5 py-4">
-                <p className="font-semibold text-textMain">{lang}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="mx-auto mt-16 max-w-7xl px-6 lg:px-8">
-          <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface2 px-6 py-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-textMain">Ready for a real-time duel?</h2>
-              <p className="mt-1 text-sm text-textMuted">Create a room, share the code, and race to Accepted.</p>
-            </div>
-            <Link href="/match" className="inline-flex rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-primaryHover">
-              Start a duel
-            </Link>
-          </div>
-        </section>
+        <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 border-t border-borderSoft px-6 py-7 text-xs text-textSoft lg:px-8"><span><span className="font-semibold text-textMuted">CodeRoyale</span><span className="mx-3 text-border">/</span>Built for a little healthy competition.</span><Link href="/health" className="inline-flex items-center gap-2 transition hover:text-primary"><UiIcon name="server" className="h-3.5 w-3.5" />Service status<UiIcon name="arrow" className="h-3.5 w-3.5" /></Link></footer>
       </main>
     </ServerWake>
   );
-
 }
