@@ -13,6 +13,7 @@ const runSchema = z.object({
   params: z
     .array(z.object({ name: z.string(), type: z.string() }))
     .optional(),
+  returnType: z.enum(["number", "number[]", "string", "string[]", "boolean"]).optional(),
 });
 
 const runRateLimit = new Map<string, number[]>();
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const payload = await request.json();
+  const payload = await request.json().catch(() => null);
   const result = runSchema.safeParse(payload);
 
   if (!result.success) {
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { language, code, functionName, args, params } = result.data;
+  const { language, code, functionName, args, params, returnType } = result.data;
   const languageId = languageIds[language];
 
   if (!languageId) {
@@ -66,7 +67,8 @@ export async function POST(request: Request) {
     code,
     functionName,
     args,
-    params
+    params,
+    returnType
   );
 
   const { data, error } = await runOnJudge0(fullCode, languageId, stdin);

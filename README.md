@@ -115,7 +115,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 INTERNAL_SECRET=your_secret_here
 ```
 
-The current judge implementation uses the public Judge0 CE endpoint in `lib/judge.ts`.
+The judge defaults to the public Judge0 CE endpoint. To use another instance,
+set `JUDGE0_BASE_URL`. Authenticated instances can use `JUDGE0_AUTH_TOKEN`
+(`X-Auth-Token`) or `JUDGE0_RAPIDAPI_KEY` (RapidAPI). Keep these server-side.
 
 ### 3. Set up the database
 
@@ -153,6 +155,31 @@ In production, this means the Next.js app and socket server should be deployed a
 ### Code execution
 
 Submissions are wrapped in a language-specific driver from `lib/judge.ts` and sent to Judge0 CE. The driver calls the submitted function with test case inputs and prints a JSON-compatible return value. Final submissions are evaluated server-side against visible and hidden tests.
+
+Judge0 submissions use asynchronous token polling and base64 transport for source,
+input, and output, including Unicode and control characters. Only successful
+execution is eligible to pass a test. Outputs are compared as JSON values, so
+array whitespace does not affect the verdict. Grading-service failures return
+a retryable error without saving a wrong-answer score. Hidden test details stay
+server-side.
+
+### Execution checks
+
+```bash
+npm test
+npm run test:judge
+# Optional: check selected languages only
+npm run test:judge -- rust go
+```
+
+`npm test` runs isolated regression tests with mocked Judge0 and database calls.
+`npm run test:judge` sends 30 small programs to the configured Judge0 endpoint:
+five value types across all six supported languages, including escaped and
+Unicode strings. It needs internet access and uses your instance's submission quota.
+To load a custom endpoint from a local environment file with Node 20+, use
+`node --env-file=.env.local --import tsx scripts/check-judge.ts`.
+
+See [the verification record](docs/verification.md) for the latest checked scope.
 
 ### Match state
 

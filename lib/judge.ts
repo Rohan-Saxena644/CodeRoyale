@@ -136,14 +136,14 @@ export function buildDriver(
       "import (",
       '\t"encoding/json"',
       '\t"fmt"',
-      '\t"io"',
+      '\t"io/ioutil"',
       '\t"os"',
       ")",
       "",
       stripped,
       "",
       "func main() {",
-      "\t_input, _ := io.ReadAll(os.Stdin)",
+      "\t_input, _ := ioutil.ReadAll(os.Stdin)",
       "\tvar _rawArgs []json.RawMessage",
       "\tjson.Unmarshal(_input, &_rawArgs)",
       unmarshalLines,
@@ -334,7 +334,9 @@ export function buildDriver(
           const esc = s
             .replace(/\\/g, "\\\\")
             .replace(/"/g, '\\"')
-            .replace(/\n/g, "\\n");
+            .replace(/\n/g, "\\n")
+            .replace(/\r/g, "\\r")
+            .replace(/\t/g, "\\t");
           return `String::from("${esc}")`;
         });
         return `vec![${items.join(", ")}]`;
@@ -350,14 +352,7 @@ export function buildDriver(
         case "boolean":
           return `println!("{}", _result);`;
         case "string":
-          // Escape the string and wrap in quotes so it matches JSON output
-          return [
-            `let _escaped = _result`,
-            `    .replace('\\\\', "\\\\\\\\")`,
-            `    .replace('"', "\\\\\"")`,
-            `    .replace('\\n', "\\\\n");`,
-            `println!("\"{}\"", _escaped);`,
-          ].join("\n    ");
+          return `println!("{}", _json_string(&_result));`;
         case "number[]":
           return [
             `let _parts: Vec<String> = _result.iter().map(|x| x.to_string()).collect();`,
@@ -366,8 +361,7 @@ export function buildDriver(
         case "string[]":
           return [
             `let _parts: Vec<String> = _result.iter().map(|s| {`,
-            `    let esc = s.replace('\\\\', "\\\\\\\\").replace('"', "\\\\\"");`,
-            `    format!("\"{}\"", esc)`,
+            `    _json_string(s)`,
             `}).collect();`,
             `println!("[{}]", _parts.join(","));`,
           ].join("\n    ");
@@ -382,10 +376,7 @@ export function buildDriver(
       }
     }
 
-    // Detect returnType from params context (caller passes it as an extra field)
-    // We infer it from the rustTypeMap of the return annotation if available.
-    // The submit route passes returnType alongside params — grab it here.
-    // For the run route (no returnType), infer from output type.
+    // Both run and submit forward the problem's return type.
     const retType = returnType ?? "number";
 
     // For number params we store as i64 (the widest integer) so the literal
@@ -415,6 +406,22 @@ export function buildDriver(
       .trim();
 
     const code = [
+      String.raw`fn _json_string(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 32 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}`,
       stripped,
       "",
       "fn main() {",
@@ -442,7 +449,29 @@ export type Judge0Result = {
   status?: { id: number; description: string };
 };
 
-const JUDGE0_BASE_URL = "https://ce.judge0.com";
+function judgeConfig() {
+  const baseUrl = (process.env.JUDGE0_BASE_URL || "https://ce.judge0.com").replace(/\/$/, "");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (process.env.JUDGE0_AUTH_TOKEN) headers["X-Auth-Token"] = process.env.JUDGE0_AUTH_TOKEN;
+  if (process.env.JUDGE0_RAPIDAPI_KEY) {
+    headers["X-RapidAPI-Key"] = process.env.JUDGE0_RAPIDAPI_KEY;
+    headers["X-RapidAPI-Host"] = new URL(baseUrl).host;
+  }
+  return { baseUrl, headers };
+}
+
+export function outputsMatch(actual: string, expected: unknown): boolean {
+  try {
+    return JSON.stringify(JSON.parse(actual)) === JSON.stringify(expected);
+  } catch {
+    return false;
+  }
+}
+
+export function executionError(data: Judge0Result): string | undefined {
+  if (data.status?.id === 3) return undefined;
+  return (data.compile_output || data.stderr || data.message || data.status?.description || "Missing execution status").slice(0, 2000);
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -457,6 +486,7 @@ export async function runOnJudge0(
   languageId: number,
   stdin: string
 ): Promise<{ data?: Judge0Result; error?: string }> {
+  const { baseUrl, headers } = judgeConfig();
   const maxAttempts = 4;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -465,10 +495,11 @@ export async function runOnJudge0(
 
     let res: Response;
     try {
-      res = await fetch(`${JUDGE0_BASE_URL}/submissions?base64_encoded=false&wait=true`, {
+      res = await fetch(`${baseUrl}/submissions?base64_encoded=true&wait=false`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source_code: sourceCode, language_id: languageId, stdin }),
+        headers,
+        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({ source_code: Buffer.from(sourceCode).toString("base64"), language_id: languageId, stdin: Buffer.from(stdin).toString("base64") }),
       });
     } catch (err) {
       if (isLastAttempt) return { error: `Network error contacting Judge0: ${String(err)}` };
@@ -481,6 +512,7 @@ export async function runOnJudge0(
     }
 
     if (!res.ok) {
+      if (res.status < 500 && res.status !== 408) return { error: `Judge0 returned HTTP ${res.status}` };
       if (isLastAttempt) return { error: `Judge0 returned HTTP ${res.status}` };
       continue;
     }
@@ -495,11 +527,12 @@ export async function runOnJudge0(
 
     // Poll by token while the submission is still queued/processing.
     let pollAttempts = 0;
-    while (isPending(data) && data.token && pollAttempts < 5) {
-      await sleep(500 + pollAttempts * 500);
+    while ((!data.status || isPending(data)) && data.token && pollAttempts < 20) {
+      await sleep(750);
       try {
         const pollRes = await fetch(
-          `${JUDGE0_BASE_URL}/submissions/${data.token}?base64_encoded=false`
+          `${baseUrl}/submissions/${encodeURIComponent(data.token)}?base64_encoded=true`,
+          { headers, signal: AbortSignal.timeout(10000), cache: "no-store" }
         );
         if (pollRes.ok) data = await pollRes.json();
       } catch {
@@ -508,13 +541,15 @@ export async function runOnJudge0(
       pollAttempts++;
     }
 
-    if (isPending(data)) {
-      if (isLastAttempt) {
-        return { error: `Judge0 timed out while ${data.status?.description ?? "processing"}` };
-      }
-      continue;
+    if (isPending(data) || !data.status) {
+      return { error: `Judge0 timed out while ${data.status?.description ?? "processing"}` };
     }
 
+    if (data.status.id === 13) return { error: "Judge0 internal execution error. Please try again." };
+
+    for (const field of ["stdout", "stderr", "compile_output", "message"] as const) {
+      if (data[field]) data[field] = Buffer.from(data[field], "base64").toString("utf8");
+    }
     return { data };
   }
 

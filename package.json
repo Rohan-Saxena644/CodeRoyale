@@ -7,6 +7,8 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "tsx --test tests/*.test.ts",
+    "test:judge": "tsx scripts/check-judge.ts",
     "socket": "tsx server/index.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

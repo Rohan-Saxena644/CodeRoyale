@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { buildDriver, languageIds, runOnJudge0 } from "@/lib/judge";
+import { buildDriver, executionError, languageIds, outputsMatch, runOnJudge0 } from "@/lib/judge";
 
 const submitSchema = z.object({
   matchId: z.string().min(1).max(64),
@@ -45,8 +45,6 @@ type RunOutcome = {
   isJudgeError?: boolean;
 };
 
-const RUN_RETRY_DELAYS_MS = [800, 1600];
-
 async function runOneTest(payload: RunPayload): Promise<RunOutcome> {
   const languageId = languageIds[payload.language];
   if (!languageId) {
@@ -58,35 +56,20 @@ async function runOneTest(payload: RunPayload): Promise<RunOutcome> {
     payload.code,
     payload.functionName,
     payload.args,
-    payload.params
+    payload.params,
+    payload.returnType
   );
 
-  for (let attempt = 0; attempt <= RUN_RETRY_DELAYS_MS.length; attempt++) {
-    if (attempt > 0) await sleep(RUN_RETRY_DELAYS_MS[attempt - 1]);
-    const isLastAttempt = attempt === RUN_RETRY_DELAYS_MS.length;
-
-    const { data, error } = await runOnJudge0(fullCode, languageId, stdin);
-
-    if (error || !data) {
-      if (!isLastAttempt) continue;
-      return { actual: "", runError: `Judge error: ${error ?? "unknown"}`, isJudgeError: true };
-    }
-
-    if (!data.stdout && (data.stderr || data.compile_output)) {
-      return {
-        actual: "",
-        runError: String(data.stderr ?? data.compile_output ?? "").slice(0, 200),
-      };
-    }
-
-    return { actual: (data.stdout ?? "").trim() };
+  const { data, error } = await runOnJudge0(fullCode, languageId, stdin);
+  if (error || !data) {
+    return { actual: "", runError: `Judge error: ${error ?? "unknown"}`, isJudgeError: true };
   }
-
-  return { actual: "", runError: "Run failed after retries", isJudgeError: true };
+  const failure = executionError(data);
+  return failure ? { actual: "", runError: failure } : { actual: (data.stdout ?? "").trim() };
 }
 
 export async function POST(request: Request) {
-  const payload = await request.json();
+  const payload = await request.json().catch(() => null);
   const result = submitSchema.safeParse(payload);
 
   if (!result.success) {
@@ -160,8 +143,12 @@ export async function POST(request: Request) {
         returnType: rawJson.functionSignature.returnType,
       });
 
+      if (isJudgeError) {
+        return NextResponse.json({ error: "The grading service could not complete this submission. Please try again.", hasJudgeErrors: true }, { status: 502 });
+      }
+
       const expected = JSON.stringify(tc.expectedOutput);
-      const passed = !runError && actual === expected;
+      const passed = !runError && outputsMatch(actual, tc.expectedOutput);
 
       runResults.push({
         input: JSON.stringify(tc.args),
@@ -179,6 +166,10 @@ export async function POST(request: Request) {
     const allPassed = totalTests > 0 && passedTests === totalTests;
     const verdict = allPassed ? "AC" : "WA";
     const hasJudgeErrors = runResults.some((r) => r.isJudgeError);
+
+    if (hasJudgeErrors) {
+      return NextResponse.json({ error: "The grading service could not complete this submission. Please try again.", hasJudgeErrors: true }, { status: 502 });
+    }
 
     const submission = await prisma.submission.create({
       data: {
@@ -231,7 +222,7 @@ export async function POST(request: Request) {
       passedTests,
       totalTests,
       hasJudgeErrors,
-      submission,
+      submission: { id: submission.id, verdict: submission.verdict, score: submission.score },
       results: runResults.filter((r) => !r.isHidden),
     });
   } catch (err) {
