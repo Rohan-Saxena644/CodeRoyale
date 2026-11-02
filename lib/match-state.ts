@@ -2,8 +2,8 @@ import type { MatchStatus } from "@/lib/types";
 
 const transitions: Record<MatchStatus, MatchStatus[]> = {
   waiting: ["countdown"],
-  countdown: ["active", "ended"],
-  active: ["ended"],
+  countdown: ["waiting", "active", "ended", "finished"],
+  active: ["ended", "finished"],
   ended: [],
   finished: []
 };
@@ -22,7 +22,7 @@ export function nextMatchStatus(from: MatchStatus, event: "both-ready" | "countd
   }
 
   if ((from === "countdown" || from === "active") && (event === "forfeit" || event === "all-tests-passed")) {
-    return "ended";
+    return "finished";
   }
 
   return from;

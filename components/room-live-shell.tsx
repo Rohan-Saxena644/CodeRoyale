@@ -54,6 +54,7 @@ export function RoomLiveShell({
   const [countdownLeft, setCountdownLeft] = useState<number | null>(null);
   const [isReadyPending, setIsReadyPending] = useState(false);
   const [playerLeftName, setPlayerLeftName] = useState<string | null>(null);
+  const [roomError, setRoomError] = useState<string | null>(null);
 
   const selfHandle = useMemo(
     () => (viewerRole === "host" ? hostName : guestName ?? "Guest"),
@@ -91,7 +92,7 @@ export function RoomLiveShell({
   useEffect(() => {
     const socket: Socket = io(getSocketUrl(), {
       transports: ["websocket"],
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
     });
     socketRef.current = socket;
@@ -108,16 +109,23 @@ export function RoomLiveShell({
 
     socket.on("disconnect", () => {
       setConnectionState("disconnected");
+      setIsReadyPending(false);
     });
+    socket.on("connect_error", () => { setConnectionState("disconnected"); setIsReadyPending(false); });
+    socket.on("room:error", (payload: { error: string }) => { setRoomError(payload.error); setIsReadyPending(false); });
 
     socket.on("room:role-updated", (nextRole: "host" | "guest") => {
       roleRef.current = nextRole;
       setCurrentViewerRole(nextRole);
       setIsReadyPending(false);
+      const url = new URL(window.location.href);
+      url.searchParams.set("role", nextRole);
+      window.history.replaceState(null, "", url);
     });
 
     socket.on("room:state", (nextPresence: RoomPresenceState) => {
       if (nextPresence.roomId !== roomId) return;
+      setRoomError(null);
 
       if (nextPresence.status === "active") {
         router.push(
@@ -182,6 +190,7 @@ export function RoomLiveShell({
 
   return (
     <>
+      {roomError && <p role="alert" className="mb-4 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">{roomError}</p>}
       {playerLeftName && (
         <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-danger/30 bg-danger/10 px-5 py-3">
           <p className="text-sm font-semibold text-textMain">

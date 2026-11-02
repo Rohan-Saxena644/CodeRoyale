@@ -119,16 +119,19 @@ export async function getStoredMatchByInviteCode(inviteCode: string) {
 }
 
 export async function updateStoredMatchGuest(inviteCode: string, guestName: string) {
-  const match = await db.match.update({
+  const claimed = await prisma.match.updateMany({
     where: {
-      inviteCode: inviteCode.toUpperCase()
+      inviteCode: inviteCode.toUpperCase(),
+      status: "waiting",
+      OR: [{ guestName: null }, { guestName }],
     },
     data: {
       guestName,
-      status: "waiting"
     }
   });
-
+  if (claimed.count !== 1) throw new Error("Room is full or has already started");
+  const match = await db.match.findUnique({ where: { inviteCode: inviteCode.toUpperCase() } });
+  if (!match) throw new Error("Room no longer exists");
   return mapStoredMatch(match as unknown as MatchRow);
 }
 

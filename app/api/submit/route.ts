@@ -5,6 +5,8 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildDriver, executionError, languageIds, outputsMatch, runOnJudge0 } from "@/lib/judge";
+import { MATCH_DURATION_MS, matchDeadline } from "@/lib/match-rules";
+export const maxDuration = 300;
 
 const submitSchema = z.object({
   matchId: z.string().min(1).max(64),
@@ -89,19 +91,26 @@ export async function POST(request: Request) {
   try {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
-      select: { status: true, hostName: true, guestName: true, winnerRole: true },
+      select: { status: true, hostName: true, guestName: true, winnerRole: true, startedAt: true, duelLanguage: true },
     });
 
     if (!match) {
       return NextResponse.json({ error: "Match not found" }, { status: 404 });
     }
 
-    if (match.status === "finished") {
-      return NextResponse.json({ error: "Match has already ended" }, { status: 409 });
+    if (match.status !== "active") {
+      return NextResponse.json({ error: "Match is not active" }, { status: 409 });
     }
 
     if (match.winnerRole) {
       return NextResponse.json({ error: "Match has already ended" }, { status: 409 });
+    }
+    if (match.duelLanguage !== language) {
+      return NextResponse.json({ error: "Use the language selected for this match" }, { status: 400 });
+    }
+    const deadline = matchDeadline(match.startedAt);
+    if (deadline === null || Date.now() >= deadline) {
+      return NextResponse.json({ error: "Match time has expired" }, { status: 409 });
     }
 
     const problem = await prisma.problem.findUnique({ where: { matchId } });
@@ -171,6 +180,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "The grading service could not complete this submission. Please try again.", hasJudgeErrors: true }, { status: 502 });
     }
 
+    const latestMatch = await prisma.match.findUnique({ where: { id: matchId }, select: { status: true, winnerRole: true } });
+    if (latestMatch?.status !== "active" || latestMatch.winnerRole || Date.now() >= deadline) {
+      return NextResponse.json({ error: "The match ended while your code was being judged" }, { status: 409 });
+    }
+
     const submission = await prisma.submission.create({
       data: {
         matchId,
@@ -184,17 +198,12 @@ export async function POST(request: Request) {
     });
 
     if (allPassed) {
-      const existingWinner = await prisma.match.findUnique({
-        where: { id: matchId },
-        select: { winnerRole: true },
+      const claimed = await prisma.match.updateMany({
+        where: { id: matchId, status: "active", winnerRole: null, startedAt: { gt: new Date(Date.now() - MATCH_DURATION_MS) } },
+        data: { winnerRole: role, status: "finished", endedAt: new Date() },
       });
 
-      if (!existingWinner?.winnerRole) {
-        await prisma.match.update({
-          where: { id: matchId },
-          data: { winnerRole: role, status: "finished" },
-        });
-
+      if (claimed.count === 1) {
         const socketUrl =
           process.env.SOCKET_SERVER_URL ??
           process.env.NEXT_PUBLIC_SOCKET_URL ??
@@ -210,6 +219,7 @@ export async function POST(request: Request) {
               ...(secret ? { "x-internal-secret": secret } : {}),
             },
             body: JSON.stringify({ roomId: matchId, winnerRole: role }),
+            signal: AbortSignal.timeout(5000),
           });
         } catch (err) {
           console.warn("[submit] could not notify socket server:", err);

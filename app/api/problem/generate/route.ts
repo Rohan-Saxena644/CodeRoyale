@@ -3,6 +3,7 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { problemSeeds } from "@/lib/problem-seeds";
+import { publicProblem } from "@/lib/match-rules";
 export const runtime = "nodejs";
 
 const requestSchema = z.object({
@@ -10,7 +11,11 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const payload = await request.json();
+  const secret = process.env.INTERNAL_SECRET;
+  if ((secret && request.headers.get("x-internal-secret") !== secret) || (!secret && process.env.NODE_ENV === "production")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const payload = await request.json().catch(() => null);
   const result = requestSchema.safeParse(payload);
 
   if (!result.success) {
@@ -30,7 +35,7 @@ export async function POST(request: Request) {
 
     const existing = await prisma.problem.findUnique({ where: { matchId } });
     if (existing) {
-      return NextResponse.json({ problem: existing });
+      return NextResponse.json({ problem: publicProblem(existing) });
     }
 
     const difficulty = match.difficulty as "easy" | "medium" | "hard";
@@ -38,8 +43,10 @@ export async function POST(request: Request) {
     const pool = matching.length > 0 ? matching : problemSeeds;
     const seed = pool[Math.floor(Math.random() * pool.length)];
 
-    const problem = await prisma.problem.create({
-      data: {
+    const problem = await prisma.problem.upsert({
+      where: { matchId },
+      update: {},
+      create: {
         mode: "competitive",
         title: seed.title,
         prompt: seed.statement,
@@ -51,11 +58,11 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ problem });
+    return NextResponse.json({ problem: publicProblem(problem) });
   } catch (err) {
     console.error("[generate-problem] error:", err);
     return NextResponse.json(
-      { error: "Problem generation failed", detail: String(err) },
+      { error: "Problem generation failed" },
       { status: 500 }
     );
   }

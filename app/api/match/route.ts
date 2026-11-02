@@ -7,9 +7,9 @@ export const runtime = "nodejs";
 const matchSchema = z.object({
   hostName: z.string().trim().min(2).max(32),
   config: z.object({
-    mode: z.enum(["competitive", "dev"]),
+    mode: z.literal("competitive"),
     difficulty: z.enum(["easy", "medium", "hard"]),
-    duelLanguage: z.enum(["python", "javascript", "cpp", "go", "rust", "java"]).optional(),
+    duelLanguage: z.enum(["python", "javascript", "cpp", "go", "rust", "java"]).default("javascript"),
     devCategory: z.enum(["react-ui", "express-api", "go-backend", "rust-backend", "next-actions"]).optional(),
   }),
 });
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const payload = await request.json();
+  const payload = await request.json().catch(() => null);
   const result = matchSchema.safeParse(payload);
 
   if (!result.success) {

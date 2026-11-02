@@ -122,6 +122,13 @@ export function buildDriver(
   // ── Go ───────────────────────────────────────────────────────────────────
   if (language === "go") {
     const stripped = stripGoBoilerplate(userCode);
+    const imports = new Set(['"encoding/json"', '"fmt"', '"io/ioutil"', '"os"']);
+    for (const match of userCode.matchAll(/^import\s+(?:\(([\s\S]*?)\)|("[^"\n]+"))\s*$/gm)) {
+      for (const spec of (match[1] ?? match[2]).split(/\r?\n/)) {
+        const clean = spec.replace(/\/\/.*$/, "").trim();
+        if (clean) imports.add(clean);
+      }
+    }
     const unmarshalLines = (params ?? [])
       .map((p, i) => {
         const goType = goTypeMap[p.type] ?? "interface{}";
@@ -134,10 +141,7 @@ export function buildDriver(
       "package main",
       "",
       "import (",
-      '\t"encoding/json"',
-      '\t"fmt"',
-      '\t"io/ioutil"',
-      '\t"os"',
+      ...Array.from(imports, spec => `\t${spec}`),
       ")",
       "",
       stripped,

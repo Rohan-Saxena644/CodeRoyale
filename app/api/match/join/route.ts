@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const payload = await request.json();
+  const payload = await request.json().catch(() => null);
   const result = joinSchema.safeParse(payload);
 
   if (!result.success) {
@@ -43,17 +43,20 @@ export async function POST(request: Request) {
   }
 
   const inviteCode = result.data.inviteCode.toUpperCase();
+  try {
   const existingMatch = await getStoredMatchByInviteCode(inviteCode);
 
   if (!existingMatch) {
     return NextResponse.json({ error: "Room not found for that invite code." }, { status: 404 });
+  }
+  if (existingMatch.status !== "waiting") {
+    return NextResponse.json({ error: "That match has already started or ended." }, { status: 409 });
   }
 
   if (existingMatch.guestName && existingMatch.guestName !== result.data.guestName) {
     return NextResponse.json({ error: "That room already has a guest joined." }, { status: 409 });
   }
 
-  try {
     const updatedMatch = await updateStoredMatchGuest(inviteCode, result.data.guestName);
     const track =
       updatedMatch.config.mode === "competitive"

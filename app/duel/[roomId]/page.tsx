@@ -1,4 +1,5 @@
 import { Header } from "@/components/header";
+import { notFound } from "next/navigation";
 import { DuelLiveShell } from "@/components/duel-live-shell";
 import { getStoredMatchByInviteCode } from "@/lib/match-repository";
 import type { DevCategory, DuelLanguage, MatchConfig, ModeKind } from "@/lib/types";
@@ -17,6 +18,7 @@ export default async function DuelPage({ params, searchParams }: DuelPageProps) 
   const query = await searchParams;
   const inviteCode = (readSingle(query.invite) ?? roomId.slice(-6)).toUpperCase();
   const storedMatch = await getStoredMatchByInviteCode(inviteCode);
+  if (!storedMatch || storedMatch.id !== roomId) notFound();
 
   const mode = storedMatch?.config.mode ?? ((readSingle(query.mode) as ModeKind | undefined) ?? "competitive");
   const difficulty =
