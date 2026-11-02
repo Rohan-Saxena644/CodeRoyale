@@ -156,6 +156,13 @@ In production, this means the Next.js app and socket server should be deployed a
 
 Submissions are wrapped in a language-specific driver from `lib/judge.ts` and sent to Judge0 CE. The driver calls the submitted function with test case inputs and prints a JSON-compatible return value. Final submissions are evaluated server-side against visible and hidden tests.
 
+Matches use a persisted start time and a 30-minute server deadline. Refreshing
+the page does not restart the clock. A result must finish grading before that
+deadline to count. Winner claims use a conditional database update so accepted
+submissions and timeout resolution cannot overwrite an existing result.
+Production requires the same non-empty `INTERNAL_SECRET` on both services for
+problem generation and result notifications.
+
 Judge0 submissions use asynchronous token polling and base64 transport for source,
 input, and output, including Unicode and control characters. Only successful
 execution is eligible to pass a test. Outputs are compared as JSON values, so
@@ -180,6 +187,7 @@ To load a custom endpoint from a local environment file with Node 20+, use
 `node --env-file=.env.local --import tsx scripts/check-judge.ts`.
 
 See [the verification record](docs/verification.md) for the latest checked scope.
+See [the logic review](docs/logic-review.md) for remaining readiness limits.
 
 ### Match state
 
