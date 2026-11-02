@@ -14,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="noise bg-bg font-sans text-textMain">
+      <body className="bg-bg font-sans text-textMain">
         {children}
         <Analytics />
       </body>

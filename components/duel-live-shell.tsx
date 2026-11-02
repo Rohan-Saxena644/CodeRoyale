@@ -200,6 +200,7 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
   const [problem, setProblem] = useState<Problem | null>(null);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(30 * 60);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [opponentLeft, setOpponentLeft] = useState<string | null>(null);
@@ -319,16 +320,22 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
 
   async function handleSubmit() {
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const res = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ matchId: roomId, role: viewerRoleState, language: editorLanguage, code: myCode }),
       });
-      const data = (await res.json()) as Verdict;
+      const data = (await res.json()) as Verdict & { error?: string };
+      if (!res.ok) {
+        setSubmitError(data.error ?? "Could not submit your code. Please try again.");
+        return;
+      }
       setVerdict(data);
     } catch (err) {
       console.error("[submit]", err);
+      setSubmitError("Could not reach the grading service. Check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
@@ -352,7 +359,7 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
       )}
 
       {matchResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-md">
+        <div role="dialog" aria-modal="true" aria-label="Match result" className="fixed inset-0 z-50 flex items-center justify-center bg-ink/25 p-6 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 text-center shadow-card">
             <StatusBadge tone={matchResult.isDraw ? "warning" : matchResult.iWon ? "success" : "danger"}>{matchResult.reason ?? "complete"}</StatusBadge>
             <h1 className="mt-4 text-3xl font-semibold text-textMain">{matchResult.isDraw ? "Draw" : matchResult.iWon ? "Accepted first" : "Opponent accepted first"}</h1>
@@ -388,7 +395,7 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-[0.78fr_1fr_1fr]">
+        <div className="mt-4 grid gap-4 xl:grid-cols-[0.78fr_1fr_1fr] [&>*]:min-w-0">
           <aside className="max-h-[720px] overflow-y-auto rounded-xl border border-border bg-surface p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Problem statement</p>
             {problem ? (
@@ -426,7 +433,7 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
               <Editor
                 height="620px"
                 language={editorLanguage}
-                theme="vs-dark"
+                theme="light"
                 value={myCode}
                 onChange={handleCodeChange}
                 options={editorOptions(false)}
@@ -455,7 +462,7 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
               <StatusBadge tone={opponentTone}>{opponentStatus}</StatusBadge>
             </div>
             <div className="overflow-hidden rounded-lg border border-borderSoft bg-editorBg">
-              <Editor height="620px" language={editorLanguage} theme="vs-dark" value={opponentCode} options={editorOptions(true)} />
+              <Editor height="620px" language={editorLanguage} theme="light" value={opponentCode} options={editorOptions(true)} />
             </div>
           </section>
         </div>
@@ -463,7 +470,7 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
         <section className="mt-4 rounded-xl border border-border bg-surface p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-textMain">Test cases / Output / Submission results</p>
+              <p className="text-sm font-semibold text-textMain">Submission results</p>
               <p className="mt-1 text-xs text-textSoft">Visible judge output appears here after you submit.</p>
             </div>
             <button
@@ -476,6 +483,7 @@ export function DuelLiveShell({ roomId, inviteCode, hostName, guestName, viewerR
             </button>
           </div>
 
+          {submitError && <p role="alert" className="mt-4 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">{submitError}</p>}
           {verdict ? (
             <div className="mt-4">
               <div className="flex flex-wrap items-center gap-3">

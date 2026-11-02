@@ -23,35 +23,40 @@ export function MatchForm() {
     const payload: MatchConfig = { mode: "competitive", difficulty, duelLanguage };
 
     startTransition(async () => {
-      const response = await fetch("/api/match", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hostName: formData.get("hostName"), config: payload }),
-      });
+      try {
+        const response = await fetch("/api/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hostName: formData.get("hostName"), config: payload }),
+        });
 
-      if (!response.ok) {
-        setError("Could not create a room. Please try again.");
-        return;
+        if (!response.ok) {
+          setError("Could not create a room. Please try again.");
+          return;
+        }
+
+        const data = (await response.json()) as { roomUrl: string };
+        router.push(data.roomUrl as Route);
+      } catch {
+        setError("Could not reach the room service. Please try again.");
       }
-
-      const data = (await response.json()) as { roomUrl: string };
-      router.push(data.roomUrl as Route);
     });
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card-border rounded-xl border border-border bg-surface p-6">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Host a room</p>
-      <h2 className="mt-3 text-2xl font-semibold text-textMain">Host a room</h2>
+    <form onSubmit={handleSubmit} className="card-border flex flex-col rounded-xl border border-border bg-surface p-6 sm:p-8">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Set the challenge</p>
+      <h2 className="mt-3 text-2xl font-semibold text-textMain">Create a room</h2>
       <p className="mt-2 text-sm leading-6 text-textMuted">
         Set up the room and share the invite code with your opponent.
       </p>
 
       <div className="mt-6 grid gap-5">
         <label className="space-y-2 text-sm text-textMuted">
-          <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Your name</span>
+          <span className="block text-sm font-medium text-textMain">Your name</span>
           <input
             name="hostName"
+            autoComplete="nickname"
             placeholder="dev_handle"
             required
             className="w-full rounded-lg border border-border bg-bgSoft px-3 py-2.5 text-textMain outline-none transition placeholder:text-textSoft focus:border-primary"
@@ -59,7 +64,7 @@ export function MatchForm() {
         </label>
 
         <label className="space-y-2 text-sm text-textMuted">
-          <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Difficulty</span>
+          <span className="block text-sm font-medium text-textMain">Difficulty</span>
           <select
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value as MatchConfig["difficulty"])}
@@ -73,14 +78,14 @@ export function MatchForm() {
       </div>
 
       <label className="mt-5 block space-y-2 text-sm text-textMuted">
-        <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-textSoft">Language</span>
+        <span className="block text-sm font-medium text-textMain">Language</span>
         <select
           value={duelLanguage}
           onChange={(e) => setDuelLanguage(e.target.value as DuelLanguage)}
           className="w-full rounded-lg border border-border bg-bgSoft px-3 py-2.5 text-textMain outline-none transition focus:border-primary"
         >
           {duelLanguages.map((lang) => (
-            <option key={lang} value={lang}>{lang}</option>
+            <option key={lang} value={lang}>{{ python: "Python", javascript: "JavaScript", cpp: "C++", go: "Go", rust: "Rust", java: "Java" }[lang]}</option>
           ))}
         </select>
       </label>
@@ -95,7 +100,7 @@ export function MatchForm() {
         </button>
       </div>
 
-      {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="mt-4 text-sm text-danger">{error}</p> : null}
     </form>
   );
 }
